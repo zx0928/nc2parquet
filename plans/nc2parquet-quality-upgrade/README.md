@@ -38,11 +38,11 @@ This plan uses **progressive planning**. Epics 1-2 have fully detailed tickets r
 | ticket-006 | Add Unit Tests for Output and Storage                  | epic-01 | completed | Detailed     |
 | ticket-007 | Add Property-Based Tests with Proptest                 | epic-01 | completed | Detailed     |
 | ticket-008 | Add Integration Tests for Error Paths                  | epic-01 | completed | Detailed     |
-| ticket-009 | Extract Command Handlers from main.rs                  | epic-02 | pending   | Detailed     |
-| ticket-010 | Improve Library Error Types with thiserror             | epic-02 | pending   | Detailed     |
-| ticket-011 | Audit and Tighten Visibility Modifiers                 | epic-02 | pending   | Detailed     |
-| ticket-012 | Add Exhaustive Rustdoc with Examples                   | epic-02 | pending   | Detailed     |
-| ticket-013 | Remove Dead Code and Fix Remaining Clippy Warnings     | epic-02 | pending   | Detailed     |
+| ticket-009 | Extract Command Handlers from main.rs                  | epic-02 | completed | Detailed     |
+| ticket-010 | Improve Library Error Types with thiserror             | epic-02 | completed | Detailed     |
+| ticket-011 | Audit and Tighten Visibility Modifiers                 | epic-02 | completed | Detailed     |
+| ticket-012 | Add Exhaustive Rustdoc with Examples                   | epic-02 | completed | Detailed     |
+| ticket-013 | Remove Dead Code and Fix Remaining Clippy Warnings     | epic-02 | completed | Detailed     |
 | ticket-014 | Add Criterion Benchmark Suite                          | epic-03 | pending   | Outline      |
 | ticket-015 | Implement Chunked NetCDF Reading                       | epic-03 | pending   | Outline      |
 | ticket-016 | Reduce Allocation Overhead in Extraction Pipeline      | epic-03 | pending   | Outline      |

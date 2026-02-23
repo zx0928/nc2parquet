@@ -397,8 +397,8 @@ mod range_filter_edge_case_tests {
     use crate::test_helpers::get_test_data_path;
 
     #[test]
-    fn test_range_filter_outside_actual_range_returns_empty(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_range_filter_outside_actual_range_returns_empty()
+    -> Result<(), Box<dyn std::error::Error>> {
         // latitude values in pres_temp_4D.nc: [25, 30, 35, 40, 45, 50]
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -420,8 +420,8 @@ mod range_filter_edge_case_tests {
     }
 
     #[test]
-    fn test_range_filter_covers_entire_dimension_returns_all(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_range_filter_covers_entire_dimension_returns_all()
+    -> Result<(), Box<dyn std::error::Error>> {
         // latitude values: [25, 30, 35, 40, 45, 50] → 6 values
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -486,8 +486,8 @@ mod list_filter_edge_case_tests {
     }
 
     #[test]
-    fn test_list_filter_all_longitude_values_returns_all_indices(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_list_filter_all_longitude_values_returns_all_indices()
+    -> Result<(), Box<dyn std::error::Error>> {
         let all_lons = vec![
             -125.0, -120.0, -115.0, -110.0, -105.0, -100.0, -95.0, -90.0, -85.0, -80.0, -75.0,
             -70.0,
@@ -515,8 +515,8 @@ mod list_filter_edge_case_tests {
     }
 
     #[test]
-    fn test_list_filter_near_match_does_not_match_due_to_exact_comparison(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_list_filter_near_match_does_not_match_due_to_exact_comparison()
+    -> Result<(), Box<dyn std::error::Error>> {
         // NCListFilter uses exact f64 equality; -120.0000001 must not match -120.0
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -558,8 +558,8 @@ mod point_2d_filter_edge_case_tests {
     }
 
     #[test]
-    fn test_2d_point_filter_points_far_from_grid_returns_empty(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_2d_point_filter_points_far_from_grid_returns_empty()
+    -> Result<(), Box<dyn std::error::Error>> {
         // Points in the Atlantic Ocean — outside the Pacific-focused grid in pres_temp_4D.nc
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;

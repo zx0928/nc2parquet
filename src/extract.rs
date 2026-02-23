@@ -1,30 +1,18 @@
-//! # Data Extraction
-//!
-//! This module handles the extraction of NetCDF data into Polars DataFrames
-//! with sophisticated filtering and dimension management.
-//!
-//! ## Key Components
-//!
-//! - [`DimensionIndexManager`]: Manages dimension indices and filter intersections
-//! - [`extract_data_to_dataframe`]: Main extraction function with filter application
-
+use crate::errors::Nc2ParquetError;
 use crate::filters::{FilterResult, NCFilter};
 use polars::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 /// Manages dimension indices and coordinate combinations during filtering operations.
-///
-/// This struct maintains the state of valid indices for each dimension and handles
-/// the intersection of multiple filters while preserving coordinate relationships.
 #[derive(Debug, Clone)]
-pub struct DimensionIndexManager {
+pub(crate) struct DimensionIndexManager {
     dimension_indices: HashMap<String, HashSet<usize>>,
     dimension_order: Vec<String>,
     explicit_combinations: Option<Vec<Vec<usize>>>,
 }
 
 impl DimensionIndexManager {
-    pub fn new(var: &netcdf::Variable) -> Result<Self, Box<dyn std::error::Error>> {
+    pub(crate) fn new(var: &netcdf::Variable) -> Result<Self, Nc2ParquetError> {
         let mut dimension_indices = HashMap::new();
         let mut dimension_order = Vec::new();
 
@@ -44,10 +32,10 @@ impl DimensionIndexManager {
         })
     }
 
-    pub fn apply_filter_result(
+    pub(crate) fn apply_filter_result(
         &mut self,
         result: &FilterResult,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Nc2ParquetError> {
         match result {
             FilterResult::Single { dimension, indices } => {
                 if let Some(current_indices) = self.dimension_indices.get_mut(dimension) {
@@ -57,7 +45,10 @@ impl DimensionIndexManager {
                         .cloned()
                         .collect();
                 } else {
-                    return Err(format!("Unknown dimension: {}", dimension).into());
+                    return Err(Nc2ParquetError::Extraction(format!(
+                        "Unknown dimension: {}",
+                        dimension
+                    )));
                 }
             }
 
@@ -91,17 +82,17 @@ impl DimensionIndexManager {
         lat_dim: &str,
         lon_dim: &str,
         pairs: &[(usize, usize)],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Nc2ParquetError> {
         let lat_pos = self
             .dimension_order
             .iter()
             .position(|d| d == lat_dim)
-            .ok_or(format!("Dimension {} not found", lat_dim))?;
+            .ok_or_else(|| Nc2ParquetError::DimensionNotFound(lat_dim.to_string()))?;
         let lon_pos = self
             .dimension_order
             .iter()
             .position(|d| d == lon_dim)
-            .ok_or(format!("Dimension {} not found", lon_dim))?;
+            .ok_or_else(|| Nc2ParquetError::DimensionNotFound(lon_dim.to_string()))?;
 
         let mut combinations = Vec::new();
 
@@ -137,22 +128,22 @@ impl DimensionIndexManager {
         lat_dim: &str,
         lon_dim: &str,
         triplets: &[(usize, usize, usize)],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Nc2ParquetError> {
         let time_pos = self
             .dimension_order
             .iter()
             .position(|d| d == time_dim)
-            .ok_or(format!("Dimension {} not found", time_dim))?;
+            .ok_or_else(|| Nc2ParquetError::DimensionNotFound(time_dim.to_string()))?;
         let lat_pos = self
             .dimension_order
             .iter()
             .position(|d| d == lat_dim)
-            .ok_or(format!("Dimension {} not found", lat_dim))?;
+            .ok_or_else(|| Nc2ParquetError::DimensionNotFound(lat_dim.to_string()))?;
         let lon_pos = self
             .dimension_order
             .iter()
             .position(|d| d == lon_dim)
-            .ok_or(format!("Dimension {} not found", lon_dim))?;
+            .ok_or_else(|| Nc2ParquetError::DimensionNotFound(lon_dim.to_string()))?;
 
         let mut combinations = Vec::new();
         for &(time_idx, lat_idx, lon_idx) in triplets {
@@ -167,7 +158,7 @@ impl DimensionIndexManager {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Reason: recursive combinator requires all context parameters; decomposing would obscure the algorithm
     fn generate_combinations_with_pairs(
         &self,
         other_dims: &[(usize, Vec<usize>)],
@@ -207,15 +198,16 @@ impl DimensionIndexManager {
         }
     }
 
-    pub fn get_dimension_indices(&self, dim_name: &str) -> Option<&HashSet<usize>> {
+    #[allow(dead_code)] // Used in #[cfg(test)] modules
+    pub(crate) fn get_dimension_indices(&self, dim_name: &str) -> Option<&HashSet<usize>> {
         self.dimension_indices.get(dim_name)
     }
 
-    pub fn get_dimension_order(&self) -> &Vec<String> {
+    pub(crate) fn get_dimension_order(&self) -> &Vec<String> {
         &self.dimension_order
     }
 
-    pub fn get_all_coordinate_combinations(&self) -> Vec<Vec<usize>> {
+    pub(crate) fn get_all_coordinate_combinations(&self) -> Vec<Vec<usize>> {
         if let Some(ref explicit) = self.explicit_combinations {
             explicit.clone()
         } else {
@@ -250,31 +242,12 @@ impl DimensionIndexManager {
     }
 }
 
-/// Extracts NetCDF data to a Polars DataFrame with filter application.
-///
-/// This is the main extraction function that:
-/// 1. Creates a dimension index manager for the variable
-/// 2. Applies all filters with intersection logic
-/// 3. Extracts data only for valid coordinate combinations
-/// 4. Returns a DataFrame with coordinate and variable data
-///
-/// # Arguments
-///
-/// * `file` - The opened NetCDF file
-/// * `var` - The NetCDF variable to extract data from
-/// * `var_name` - Name of the variable for DataFrame column naming
-/// * `filters` - Vector of filters to apply
-///
-/// # Returns
-///
-/// Returns a DataFrame containing coordinate columns and the variable data,
-/// or an error if extraction fails.
-pub fn extract_data_to_dataframe(
+pub(crate) fn extract_data_to_dataframe(
     file: &netcdf::File,
     var: &netcdf::Variable,
     var_name: &str,
     filters: &Vec<Box<dyn NCFilter>>,
-) -> Result<DataFrame, Box<dyn std::error::Error>> {
+) -> Result<DataFrame, Nc2ParquetError> {
     let mut dim_manager = DimensionIndexManager::new(var)?;
     for filter in filters.iter() {
         let result = filter.apply(file)?;
@@ -288,7 +261,7 @@ fn extract_data_with_dimension_manager(
     var: &netcdf::Variable,
     var_name: &str,
     dim_manager: &DimensionIndexManager,
-) -> Result<DataFrame, Box<dyn std::error::Error>> {
+) -> Result<DataFrame, Nc2ParquetError> {
     let dimension_order = dim_manager.get_dimension_order();
     let coordinate_vars: HashMap<String, Vec<f64>> =
         get_coordinate_variables(file, dimension_order)?;
@@ -333,7 +306,7 @@ fn extract_data_with_dimension_manager(
 fn get_coordinate_variables(
     file: &netcdf::File,
     dimension_order: &[String],
-) -> Result<HashMap<String, Vec<f64>>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, Vec<f64>>, Nc2ParquetError> {
     let mut coordinate_vars = HashMap::new();
 
     for dim_name in dimension_order {
@@ -351,7 +324,7 @@ fn get_coordinate_variables(
 fn extract_variable_value(
     var: &netcdf::Variable,
     indices: &[usize],
-) -> Result<f32, Box<dyn std::error::Error>> {
+) -> Result<f32, Nc2ParquetError> {
     match indices.len() {
         1 => {
             let value_array = var.get::<f32, _>(indices[0])?;
@@ -370,6 +343,6 @@ fn extract_variable_value(
                 var.get::<f32, _>((indices[0], indices[1], indices[2], indices[3]))?;
             Ok(value_array[[]])
         }
-        _ => Err(format!("Unsupported number of dimensions: {}", indices.len()).into()),
+        _ => Err(Nc2ParquetError::UnsupportedDimensionality(indices.len())),
     }
 }

@@ -348,7 +348,10 @@ mod workflow_tests {
 
         let result = crate::process_netcdf_job(&config);
         assert!(result.is_err(), "Should fail with nonexistent input file");
-        assert!(!output_path.exists(), "Output file should not be created on error");
+        assert!(
+            !output_path.exists(),
+            "Output file should not be created on error"
+        );
 
         let config = JobConfig {
             nc_key: get_test_data_path("simple_xy.nc")
@@ -657,7 +660,8 @@ mod error_and_edge_case_tests {
 
     // Latitude range 90–100 is outside pres_temp_4D.nc bounds (~25–50); yields empty Parquet
     #[test]
-    fn test_filter_produces_empty_result_writes_empty_parquet() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_filter_produces_empty_result_writes_empty_parquet()
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempdir()?;
         let output_path = temp_dir.path().join("empty_result.parquet");
 
@@ -825,7 +829,8 @@ mod error_and_edge_case_tests {
 
     // pres_temp_4D.nc: time(2) * level(2) * latitude(6) * longitude(12) = 288 rows
     #[test]
-    fn test_full_extraction_without_filters_verifies_row_count() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_full_extraction_without_filters_verifies_row_count()
+    -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempdir()?;
         let output_path = temp_dir.path().join("full_extraction.parquet");
 

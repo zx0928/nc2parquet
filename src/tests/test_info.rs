@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod info_command_tests {
-    use crate::info::{get_netcdf_info, NetCdfDimensionInfo, NetCdfInfo, NetCdfVariableInfo};
+    use crate::info::{NetCdfDimensionInfo, NetCdfInfo, NetCdfVariableInfo, get_netcdf_info};
     use crate::test_helpers::get_test_data_path;
 
     #[tokio::test]

@@ -42,7 +42,11 @@ mod output_tests {
         let read_back = ParquetReader::new(file)
             .finish()
             .expect("must be able to read back empty parquet file");
-        assert_eq!(read_back.height(), 0, "read-back DataFrame must have 0 rows");
+        assert_eq!(
+            read_back.height(),
+            0,
+            "read-back DataFrame must have 0 rows"
+        );
         assert_eq!(
             read_back.width(),
             1,
@@ -54,7 +58,12 @@ mod output_tests {
     fn test_write_creates_nonexistent_parent_directories() {
         let df = create_simple_test_dataframe();
         let dir = create_temp_output_dir();
-        let output_path = dir.path().join("level1").join("level2").join("level3").join("out.parquet");
+        let output_path = dir
+            .path()
+            .join("level1")
+            .join("level2")
+            .join("level3")
+            .join("out.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
         write_dataframe_to_parquet(&df, output_path_str)

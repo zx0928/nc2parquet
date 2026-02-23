@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod extract_tests {
-    use crate::extract::{extract_data_to_dataframe, DimensionIndexManager};
+    use crate::extract::{DimensionIndexManager, extract_data_to_dataframe};
     use crate::filters::{FilterResult, NC2DPointFilter, NCFilter, NCRangeFilter};
     use crate::test_helpers::get_test_data_path;
 
@@ -212,8 +212,8 @@ mod filter_intersection_tests {
     use crate::test_helpers::get_test_data_path;
 
     #[test]
-    fn test_two_single_filters_narrow_independent_dimensions(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_two_single_filters_narrow_independent_dimensions()
+    -> Result<(), Box<dyn std::error::Error>> {
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
         let var = file.variable("temperature").unwrap();
@@ -253,8 +253,8 @@ mod filter_intersection_tests {
     }
 
     #[test]
-    fn test_single_filter_with_empty_indices_empties_dimension(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_single_filter_with_empty_indices_empties_dimension()
+    -> Result<(), Box<dyn std::error::Error>> {
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
         let var = file.variable("temperature").unwrap();
@@ -314,8 +314,8 @@ mod explicit_combination_tests {
     use crate::test_helpers::get_test_data_path;
 
     #[test]
-    fn test_pairs_filter_stores_explicit_coordinate_combinations(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_pairs_filter_stores_explicit_coordinate_combinations()
+    -> Result<(), Box<dyn std::error::Error>> {
         // pairs: [(1,1), (2,3)] × time: {0,1} × level: {0,1} = 8 combinations
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -351,8 +351,8 @@ mod explicit_combination_tests {
     }
 
     #[test]
-    fn test_triplets_filter_stores_one_combination_per_triplet(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_triplets_filter_stores_one_combination_per_triplet()
+    -> Result<(), Box<dyn std::error::Error>> {
         // Triplets fix (time, lat, lon); no cross-product with remaining dimensions
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -396,8 +396,8 @@ mod extraction_edge_case_tests {
     use crate::test_helpers::get_test_data_path;
 
     #[test]
-    fn test_zero_result_extraction_returns_empty_dataframe_with_correct_columns(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_zero_result_extraction_returns_empty_dataframe_with_correct_columns()
+    -> Result<(), Box<dyn std::error::Error>> {
         // latitude range 100–200 matches no values in [25,30,35,40,45,50]
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -430,8 +430,8 @@ mod extraction_edge_case_tests {
     }
 
     #[test]
-    fn test_full_4d_extraction_without_filters_returns_all_rows(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_full_4d_extraction_without_filters_returns_all_rows()
+    -> Result<(), Box<dyn std::error::Error>> {
         // 2×2×6×12 = 288 combinations
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;
@@ -468,8 +468,8 @@ mod extraction_edge_case_tests {
     }
 
     #[test]
-    fn test_multi_filter_extraction_applies_independent_intersections(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_multi_filter_extraction_applies_independent_intersections()
+    -> Result<(), Box<dyn std::error::Error>> {
         // lat range 30–40 → 3 lats; lon list [-120,-100,-80] → 3 lons; 2×2×3×3 = 36 rows
         let file_path = get_test_data_path("pres_temp_4D.nc");
         let file = netcdf::open(&file_path)?;

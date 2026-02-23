@@ -15,9 +15,11 @@ mod cli_tests {
         assert!(result.is_err()); // --help causes early exit
 
         let error = result.unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Convert NetCDF files to Parquet format"));
+        assert!(
+            error
+                .to_string()
+                .contains("Convert NetCDF files to Parquet format")
+        );
     }
 
     #[test]

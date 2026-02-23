@@ -465,7 +465,7 @@ pub struct Aggregator {
 /// Creates or overwrites a column by evaluating a formula string.
 ///
 /// Supported syntax:
-/// - Arithmetic: `+`, `-`, `*`, `/` with standard precedence (`*`/`/` bind tighter than `+`/`-`).
+/// - Arithmetic: `+`, `-`, `*`, `/` — left-associative, `*`/`/` bind tighter than `+`/`-`.
 /// - Parenthesised sub-expressions: `(a + b) * c`.
 /// - Comparisons: `<`, `>`, `==`, `!=`, `<=`, `>=`.
 /// - Numeric literals and column names.
@@ -977,16 +977,20 @@ impl FormulaApplier {
 
     fn parse_expression(&self, df: &DataFrame, expr: &str) -> PostProcessResult<Expr> {
         let expr = expr.trim();
-        let mut depth = 0;
-        for (i, c) in expr.char_indices() {
+        // Scan right-to-left so that we split on the LAST `+`/`-` at depth 0,
+        // giving left-associative evaluation: `a - b - c` → `(a - b) - c`.
+        // When scanning right-to-left, `)` increases depth and `(` decreases it.
+        let mut depth: i32 = 0;
+        let chars: Vec<(usize, char)> = expr.char_indices().collect();
+        for &(i, c) in chars.iter().rev() {
             match c {
-                '(' => depth += 1,
-                ')' => depth -= 1,
+                ')' => depth += 1,
+                '(' => depth -= 1,
                 '+' | '-' if depth == 0 => {
                     let left = &expr[..i];
                     let right = &expr[i + 1..];
                     let left_expr = self.parse_expression(df, left)?;
-                    let right_expr = self.parse_expression(df, right)?;
+                    let right_expr = self.parse_term(df, right)?;
 
                     return Ok(match c {
                         '+' => left_expr + right_expr,
@@ -1003,16 +1007,20 @@ impl FormulaApplier {
 
     fn parse_term(&self, df: &DataFrame, expr: &str) -> PostProcessResult<Expr> {
         let expr = expr.trim();
-        let mut depth = 0;
-        for (i, c) in expr.char_indices() {
+        // Scan right-to-left so that we split on the LAST `*`/`/` at depth 0,
+        // giving left-associative evaluation: `a / b / c` → `(a / b) / c`.
+        // When scanning right-to-left, `)` increases depth and `(` decreases it.
+        let mut depth: i32 = 0;
+        let chars: Vec<(usize, char)> = expr.char_indices().collect();
+        for &(i, c) in chars.iter().rev() {
             match c {
-                '(' => depth += 1,
-                ')' => depth -= 1,
+                ')' => depth += 1,
+                '(' => depth -= 1,
                 '*' | '/' if depth == 0 => {
                     let left = &expr[..i];
                     let right = &expr[i + 1..];
                     let left_expr = self.parse_term(df, left)?;
-                    let right_expr = self.parse_term(df, right)?;
+                    let right_expr = self.parse_factor(df, right)?;
 
                     return Ok(match c {
                         '*' => left_expr * right_expr,
@@ -1027,7 +1035,7 @@ impl FormulaApplier {
         self.parse_factor(df, expr)
     }
 
-        /// Parse a factor: a function call, a parenthesised sub-expression, or a
+    /// Parse a factor: a function call, a parenthesised sub-expression, or a
     /// bare operand (column name or numeric literal).
     ///
     /// Function calls are detected by `identifier(`. The matching closing

@@ -25,6 +25,8 @@ fn bench_combinations(c: &mut Criterion) {
                     parquet_key: output,
                     filters: vec![],
                     postprocessing: None,
+                    output: None,
+                    variable_names: None,
                 };
                 (dir, config)
             },
@@ -52,6 +54,8 @@ fn bench_combinations(c: &mut Criterion) {
                         },
                     }],
                     postprocessing: None,
+                    output: None,
+                    variable_names: None,
                 };
                 (dir, config)
             },
@@ -87,6 +91,8 @@ fn bench_combinations(c: &mut Criterion) {
                         },
                     ],
                     postprocessing: None,
+                    output: None,
+                    variable_names: None,
                 };
                 (dir, config)
             },
@@ -115,6 +121,8 @@ fn bench_combinations(c: &mut Criterion) {
                         },
                     }],
                     postprocessing: None,
+                    output: None,
+                    variable_names: None,
                 };
                 (dir, config)
             },

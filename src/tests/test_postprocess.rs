@@ -436,6 +436,108 @@ mod postprocess_tests {
             panic!("Expected ColumnNotFound error");
         }
     }
+
+    /// Helper: evaluate a scalar formula against a single-row DataFrame and
+    /// return the result as f64.
+    fn eval_scalar_formula(formula: &str, col: &str, value: f64) -> f64 {
+        let df = df! { col => [value] }.unwrap();
+        let processor = FormulaApplier::new(
+            "result".to_string(),
+            formula.to_string(),
+            vec![col.to_string()],
+        );
+        let result_df = processor.process(df).unwrap();
+        result_df
+            .column("result")
+            .unwrap()
+            .f64()
+            .unwrap()
+            .get(0)
+            .unwrap()
+    }
+
+    #[test]
+    fn test_formula_left_associativity_subtraction() {
+        // 10 - 3 - 2 must be (10 - 3) - 2 = 5, not 10 - (3 - 2) = 9
+        let df = df! { "x" => [0.0f64] }.unwrap();
+        let processor = FormulaApplier::new(
+            "result".to_string(),
+            "10 - 3 - 2".to_string(),
+            vec!["x".to_string()],
+        );
+        let result_df = processor.process(df).unwrap();
+        let value = result_df
+            .column("result")
+            .unwrap()
+            .f64()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        assert!(
+            (value - 5.0).abs() < 1e-10,
+            "10 - 3 - 2 should equal 5.0 (left-associative), got {}",
+            value
+        );
+    }
+
+    #[test]
+    fn test_formula_left_associativity_division() {
+        // 12 / 4 / 3 must be (12 / 4) / 3 = 1, not 12 / (4 / 3) = 9
+        let df = df! { "x" => [0.0f64] }.unwrap();
+        let processor = FormulaApplier::new(
+            "result".to_string(),
+            "12 / 4 / 3".to_string(),
+            vec!["x".to_string()],
+        );
+        let result_df = processor.process(df).unwrap();
+        let value = result_df
+            .column("result")
+            .unwrap()
+            .f64()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        assert!(
+            (value - 1.0).abs() < 1e-10,
+            "12 / 4 / 3 should equal 1.0 (left-associative), got {}",
+            value
+        );
+    }
+
+    #[test]
+    fn test_formula_left_associativity_mixed_with_columns() {
+        // column_value - 3 - 2 == (col - 3) - 2 == col - 5
+        let result = eval_scalar_formula("temperature - 3 - 2", "temperature", 10.0);
+        assert!(
+            (result - 5.0).abs() < 1e-10,
+            "col - 3 - 2 should equal 5.0, got {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_formula_precedence_mul_over_add() {
+        // 2 + 3 * 4 must be 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
+        let df = df! { "x" => [0.0f64] }.unwrap();
+        let processor = FormulaApplier::new(
+            "result".to_string(),
+            "2 + 3 * 4".to_string(),
+            vec!["x".to_string()],
+        );
+        let result_df = processor.process(df).unwrap();
+        let value = result_df
+            .column("result")
+            .unwrap()
+            .f64()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        assert!(
+            (value - 14.0).abs() < 1e-10,
+            "2 + 3 * 4 should equal 14.0 (mul binds tighter), got {}",
+            value
+        );
+    }
 }
 
 #[cfg(test)]

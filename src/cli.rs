@@ -1,15 +1,4 @@
-//! # CLI Module
-//!
-//! This module provides the command-line interface for nc2parquet, including:
-//! - Argument parsing with clap
-//! - Configuration file loading (JSON/YAML)
-//! - Environment variable support with comprehensive NC2PARQUET_ prefix
-//! - Multi-source configuration merging with priority system
-//! - Subcommands for different operations
-//! - Progress reporting and logging
-//! - Filter DSL parsing for command line and environment variables
-
-use crate::input::{FilterConfig, JobConfig};
+use crate::input::FilterConfig;
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use serde::{Deserialize, Serialize};
@@ -82,7 +71,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-#[allow(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)] // Reason: Convert variant is intentionally large; boxing would add indirection cost
 pub enum Commands {
     /// Convert NetCDF files to Parquet format
     #[command(long_about = "
@@ -170,6 +159,33 @@ EXAMPLES:
         /// Apply mathematical formula: target_column:formula:source1,source2,...
         #[arg(long = "formula", value_parser = parse_formula)]
         formulas: Vec<FormulaArg>,
+
+        /// Extract multiple variables in one pass (comma-delimited, e.g. "temperature,pressure").
+        /// When set, all listed variables are written as separate columns into one Parquet file.
+        /// All variables must have the same dimensions as each other.
+        #[arg(short = 'N', long = "variables", value_delimiter = ',')]
+        variables: Vec<String>,
+
+        /// Process all files matching this glob pattern (e.g. "data/**/*.nc").
+        /// When set, the OUTPUT argument is treated as an output directory.
+        #[arg(long, value_name = "PATTERN")]
+        glob: Option<String>,
+
+        /// Parquet compression codec: snappy, zstd, gzip, lz4, uncompressed
+        #[arg(long, value_name = "CODEC")]
+        compression: Option<String>,
+
+        /// Compression level (Zstd: 1-22, Gzip: 0-9; not valid for snappy/lz4/uncompressed)
+        #[arg(long, value_name = "LEVEL")]
+        compression_level: Option<u32>,
+
+        /// Row group size in number of rows
+        #[arg(long, value_name = "ROWS")]
+        row_group_size: Option<usize>,
+
+        /// Disable writing column statistics (min, max, null count)
+        #[arg(long, default_value_t = false)]
+        no_statistics: bool,
     },
 
     /// Validate configuration file or arguments
@@ -366,116 +382,95 @@ pub enum ConfigFormat {
     Yaml,
 }
 
-/// Range filter argument from command line
+/// Parsed range filter argument from the command line (`--range dimension:min:max`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct RangeFilterArg {
+    /// Name of the NetCDF dimension to filter.
     pub dimension: String,
+    /// Minimum value of the range (inclusive).
     pub min_value: f64,
+    /// Maximum value of the range (inclusive).
     pub max_value: f64,
 }
 
-/// List filter argument from command line
+/// Parsed list filter argument from the command line (`--list dimension:v1,v2,...`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListFilterArg {
+    /// Name of the NetCDF dimension to filter.
     pub dimension: String,
+    /// Discrete values to include.
     pub values: Vec<f64>,
 }
 
-/// Command-line argument for 2D spatial point filtering  
+/// Parsed 2D spatial point filter argument from the command line
+/// (`--point2d lat_dim,lon_dim:lat,lon:tolerance`).
 #[derive(Debug, Clone)]
 pub struct Point2DFilterArg {
+    /// Name of the latitude dimension variable.
     pub lat_dimension: String,
+    /// Name of the longitude dimension variable.
     pub lon_dimension: String,
+    /// Target latitude coordinate.
     pub lat: f64,
+    /// Target longitude coordinate.
     pub lon: f64,
+    /// Maximum coordinate distance for a cell to be considered a match.
     pub tolerance: f64,
 }
 
-/// Command-line argument for 3D spatiotemporal point filtering
+/// Parsed 3D spatiotemporal point filter argument from the command line
+/// (`--point3d time_dim,lat_dim,lon_dim:time,lat,lon:tolerance`).
 #[derive(Debug, Clone)]
 pub struct Point3DFilterArg {
+    /// Name of the time dimension variable.
     pub time_dimension: String,
+    /// Name of the latitude dimension variable.
     pub lat_dimension: String,
+    /// Name of the longitude dimension variable.
     pub lon_dimension: String,
+    /// Exact time step value to include.
     pub time: f64,
+    /// Target latitude coordinate.
     pub lat: f64,
+    /// Target longitude coordinate.
     pub lon: f64,
+    /// Maximum coordinate distance for a cell to be considered a spatial match.
     pub tolerance: f64,
 }
 
-/// Post-processing argument structures
+/// Parsed column rename argument from the command line (`--rename old_name:new_name`).
 #[derive(Debug, Clone)]
 pub struct RenameColumnArg {
+    /// Original column name in the DataFrame.
     pub old_name: String,
+    /// Replacement column name.
     pub new_name: String,
 }
 
+/// Parsed unit conversion argument from the command line
+/// (`--unit-convert column:from_unit:to_unit`).
 #[derive(Debug, Clone)]
 pub struct UnitConversionArg {
+    /// Name of the column to convert.
     pub column: String,
+    /// Source unit (e.g. `"kelvin"`).
     pub from_unit: String,
+    /// Target unit (e.g. `"celsius"`).
     pub to_unit: String,
 }
 
+/// Parsed mathematical formula argument from the command line
+/// (`--formula target:formula:source1,source2,...`).
 #[derive(Debug, Clone)]
 pub struct FormulaArg {
+    /// Name of the column to create or overwrite with the formula result.
     pub target_column: String,
+    /// Formula string (e.g. `"a + b * 2.0"`).
     pub formula: String,
+    /// Column names referenced by the formula.
     pub source_columns: Vec<String>,
 }
 
-/// Extended configuration that includes CLI-specific options
-#[derive(Deserialize, Serialize, Clone)]
-pub struct CliConfig {
-    #[serde(flatten)]
-    pub job: JobConfig,
-
-    /// CLI-specific options
-    #[serde(default)]
-    pub cli_options: CliOptions,
-}
-
-#[derive(Deserialize, Serialize, Clone, Default)]
-pub struct CliOptions {
-    /// Default log level
-    pub log_level: Option<String>,
-
-    /// Progress reporting settings
-    pub progress: Option<ProgressConfig>,
-
-    /// Output formatting preferences
-    pub output_format: Option<OutputFormat>,
-
-    /// Validation settings
-    pub validation: Option<ValidationConfig>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub struct ProgressConfig {
-    /// Enable progress bars
-    pub enabled: bool,
-
-    /// Progress update interval in seconds
-    pub interval: Option<u64>,
-
-    /// Progress bar style
-    pub style: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub struct ValidationConfig {
-    /// Strict validation mode
-    pub strict: bool,
-
-    /// Validate S3 paths
-    pub check_s3_paths: bool,
-
-    /// Validate NetCDF file accessibility  
-    pub check_file_access: bool,
-}
-
-/// Parse range filter from command line argument
-/// Format: dimension:min:max
 fn parse_range_filter(s: &str) -> Result<RangeFilterArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 3 {
@@ -501,8 +496,6 @@ fn parse_range_filter(s: &str) -> Result<RangeFilterArg, String> {
     })
 }
 
-/// Parse list filter from command line argument
-/// Format: dimension:val1,val2,val3
 fn parse_list_filter(s: &str) -> Result<ListFilterArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 2 {
@@ -524,8 +517,6 @@ fn parse_list_filter(s: &str) -> Result<ListFilterArg, String> {
     Ok(ListFilterArg { dimension, values })
 }
 
-/// Parse 2D point filter from command line argument
-/// Format: lat_dim,lon_dim:lat,lon:tolerance
 fn parse_point2d_filter(s: &str) -> Result<Point2DFilterArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 3 {
@@ -569,8 +560,6 @@ fn parse_point2d_filter(s: &str) -> Result<Point2DFilterArg, String> {
     })
 }
 
-/// Parse 3D point filter from command line argument
-/// Format: time_dim,lat_dim,lon_dim:time,lat,lon:tolerance
 fn parse_point3d_filter(s: &str) -> Result<Point3DFilterArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 3 {
@@ -619,7 +608,6 @@ fn parse_point3d_filter(s: &str) -> Result<Point3DFilterArg, String> {
     })
 }
 
-/// Parse column rename argument: old_name:new_name
 fn parse_rename_column(s: &str) -> Result<RenameColumnArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 2 {
@@ -636,7 +624,6 @@ fn parse_rename_column(s: &str) -> Result<RenameColumnArg, String> {
     Ok(RenameColumnArg { old_name, new_name })
 }
 
-/// Parse unit conversion argument: column:from_unit:to_unit
 fn parse_unit_conversion(s: &str) -> Result<UnitConversionArg, String> {
     let parts: Vec<&str> = s.split(':').collect();
     if parts.len() != 3 {
@@ -658,7 +645,6 @@ fn parse_unit_conversion(s: &str) -> Result<UnitConversionArg, String> {
     })
 }
 
-/// Parse formula argument: target_column:formula:source1,source2,...
 fn parse_formula(s: &str) -> Result<FormulaArg, String> {
     let parts: Vec<&str> = s.splitn(3, ':').collect();
     if parts.len() != 3 {
@@ -737,28 +723,6 @@ impl From<Point3DFilterArg> for FilterConfig {
     }
 }
 
-impl Default for ProgressConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            interval: Some(1),
-            style: Some("█▉▊▋▌▍▎▏  ".to_string()),
-        }
-    }
-}
-
-impl Default for ValidationConfig {
-    fn default() -> Self {
-        Self {
-            strict: false,
-            check_s3_paths: true,
-            check_file_access: false,
-        }
-    }
-}
-
-/// Parse filters from environment variables  
-/// Type alias for the complex filter result tuple
 type FilterResult = Result<
     (
         Vec<RangeFilterArg>,
@@ -769,18 +733,18 @@ type FilterResult = Result<
     String,
 >;
 
-/// Environment variable format:
-/// - NC2PARQUET_RANGE_FILTERS: "dim1:min1:max1,dim2:min2:max2"
-/// - NC2PARQUET_LIST_FILTERS: "dim1:val1,val2,val3;dim2:val4,val5"  
-/// - NC2PARQUET_POINT2D_FILTERS: "lat,lon:30.0,-120.0:0.1;lat2,lon2:40.0,-100.0:0.2"
-/// - NC2PARQUET_POINT3D_FILTERS: "time,lat,lon:0.0,30.0,-120.0:0.1"
-pub fn parse_filters_from_env() -> FilterResult {
+/// Parse filters from environment variables.
+///
+/// - `NC2PARQUET_RANGE_FILTERS`: `"dim1:min1:max1,dim2:min2:max2"`
+/// - `NC2PARQUET_LIST_FILTERS`: `"dim1:val1,val2,val3;dim2:val4,val5"`
+/// - `NC2PARQUET_POINT2D_FILTERS`: `"lat,lon:30.0,-120.0:0.1;lat2,lon2:40.0,-100.0:0.2"`
+/// - `NC2PARQUET_POINT3D_FILTERS`: `"time,lat,lon:0.0,30.0,-120.0:0.1"`
+pub(crate) fn parse_filters_from_env() -> FilterResult {
     let mut range_filters = Vec::new();
     let mut list_filters = Vec::new();
     let mut point2d_filters = Vec::new();
     let mut point3d_filters = Vec::new();
 
-    // Parse range filters from environment
     if let Ok(range_env) = env::var("NC2PARQUET_RANGE_FILTERS")
         && !range_env.trim().is_empty()
     {
@@ -794,7 +758,6 @@ pub fn parse_filters_from_env() -> FilterResult {
         }
     }
 
-    // Parse list filters from environment
     if let Ok(list_env) = env::var("NC2PARQUET_LIST_FILTERS")
         && !list_env.trim().is_empty()
     {
@@ -808,7 +771,6 @@ pub fn parse_filters_from_env() -> FilterResult {
         }
     }
 
-    // Parse 2D point filters from environment
     if let Ok(point2d_env) = env::var("NC2PARQUET_POINT2D_FILTERS")
         && !point2d_env.trim().is_empty()
     {
@@ -825,7 +787,6 @@ pub fn parse_filters_from_env() -> FilterResult {
         }
     }
 
-    // Parse 3D point filters from environment
     if let Ok(point3d_env) = env::var("NC2PARQUET_POINT3D_FILTERS")
         && !point3d_env.trim().is_empty()
     {
@@ -850,8 +811,11 @@ pub fn parse_filters_from_env() -> FilterResult {
     ))
 }
 
-/// Merge CLI filters with environment variable filters
-/// Priority: CLI arguments > Environment variables
+/// Merges CLI filter arguments with filters parsed from environment variables.
+///
+/// When a CLI argument list is non-empty it takes priority and the corresponding
+/// environment variable filters are ignored. When a CLI argument list is empty,
+/// the environment variable filters are used instead.
 pub fn merge_filters(
     cli_range: Vec<RangeFilterArg>,
     cli_list: Vec<ListFilterArg>,
@@ -860,7 +824,6 @@ pub fn merge_filters(
 ) -> FilterResult {
     let (env_range, env_list, env_point2d, env_point3d) = parse_filters_from_env()?;
 
-    // CLI arguments have priority, but we append env filters if CLI is empty
     let merged_range = if cli_range.is_empty() {
         env_range
     } else {

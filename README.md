@@ -1,738 +1,218 @@
 # nc2parquet
 
-A high-performance Rust library and CLI tool for converting NetCDF files to Parquet format with advanced filtering, cloud storage, and post-processing capabilities.
+> High-performance NetCDF to Parquet converter with advanced filtering, cloud storage, and post-processing.
+
+[![CI](https://github.com/rjmalves/nc2parquet/actions/workflows/ci.yml/badge.svg)](https://github.com/rjmalves/nc2parquet/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/rjmalves/nc2parquet/branch/main/graph/badge.svg)](https://codecov.io/gh/rjmalves/nc2parquet)
+[![Crates.io](https://img.shields.io/crates/v/nc2parquet.svg)](https://crates.io/crates/nc2parquet)
+[![docs.rs](https://img.shields.io/docsrs/nc2parquet)](https://docs.rs/nc2parquet)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-**High Performance**: Built in Rust with efficient processing of large NetCDF datasets  
-**Advanced Filtering**: Multiple filter types with intersection logic for precise data extraction  
-**Cloud Storage**: Native Amazon S3 support for input and output files with async operations  
-**Multi-Source Configuration**: CLI arguments, environment variables, and JSON/YAML configuration files  
-**Post-Processing Framework**: Built-in DataFrame transformations including column renaming, unit conversion, and formula application  
-**Professional CLI**: Comprehensive command-line interface with progress indicators, logging, and shell completions
+- **Multi-variable extraction** — extract one or many variables per pass into a single Parquet file
+- **Batch processing** — convert entire directory trees with a single glob pattern
+- **Four filter types** — range, list, 2D spatial point, and 3D spatiotemporal point with intersection logic
+- **Post-processing pipeline** — rename columns, convert units, apply mathematical formulas, and parse datetime values
+- **Amazon S3 support** — read from and write to S3 buckets with standard AWS credential chains
+- **Parquet output control** — choose compression codec, compression level, row group size, and column statistics
+- **Multi-source configuration** — compose settings from CLI flags, environment variables, and JSON/YAML config files
 
 ## Installation
 
-### Command-Line Tool
+### Build from Source
 
 ```bash
-# Install from source
-cargo install --path .
-
-# Or install from crates.io (when published)
-cargo install nc2parquet
+git clone https://github.com/rjmalves/nc2parquet.git
+cd nc2parquet
+cargo build --release
+# Binary is at target/release/nc2parquet
 ```
+
+> The `netcdf` crate is compiled with `features = ["static"]`, so HDF5/NetCDF system
+> headers are only required at build time. The resulting binary is self-contained.
 
 ### Library Dependency
 
-Add to your `Cargo.toml`:
-
 ```toml
 [dependencies]
-nc2parquet = "0.1.0"
+nc2parquet = "0.1"
 ```
 
 ## Quick Start
 
-### Command-Line Interface
-
-The CLI provides comprehensive functionality with multiple subcommands:
+### Basic CLI Conversion
 
 ```bash
-# Basic conversion
-nc2parquet convert input.nc output.parquet --variable temperature
+# Convert a single variable to Parquet
+nc2parquet convert examples/data/simple_xy.nc output.parquet -n data
 
-# S3 to S3 conversion
-nc2parquet convert s3://input-bucket/data.nc s3://output-bucket/result.parquet --variable pressure
+# Extract multiple variables into one file
+nc2parquet convert examples/data/pres_temp_4D.nc output.parquet \
+  -N temperature,pressure
 
-# Conversion with filtering
-nc2parquet convert data.nc result.parquet \
-  --variable temperature \
-  --range "latitude:30:60" \
-  --list "pressure:1000,850,500"
+# Batch convert all .nc files under a directory
+nc2parquet convert "data/**/*.nc" output/ --glob "data/**/*.nc" -n temperature
+```
 
-# Conversion with post-processing
-nc2parquet convert data.nc result.parquet \
-  --variable temperature \
+### CLI with Filters and Post-Processing
+
+```bash
+# Range + list filters, then rename and convert units
+nc2parquet convert examples/data/pres_temp_4D.nc output.parquet \
+  -n temperature \
+  --range "latitude:30:50" \
+  --list "level:1000,850,500" \
   --rename "temperature:temp_k" \
   --kelvin-to-celsius temp_k \
-  --formula "temp_f:temp_k*1.8+32"
+  --formula "temp_f:temp_k*1.8+32:temp_k"
+```
 
-# Generate configuration templates
-nc2parquet template basic -o config.json
-nc2parquet template s3 --format yaml -o s3-config.yaml
+### Inspect a NetCDF File
 
-# Validate configurations
-nc2parquet validate config.json --detailed
+```bash
+# Human-readable file summary
+nc2parquet info examples/data/pres_temp_4D.nc
 
-# File information and inspection
-nc2parquet info data.nc                           # Basic file info (human-readable)
-nc2parquet info data.nc --detailed                # Include global attributes
-nc2parquet info data.nc --variable temperature    # Show specific variable info
-nc2parquet info data.nc --format json             # JSON output for scripting
-nc2parquet info data.nc --format yaml             # YAML output
-nc2parquet info data.nc --format csv              # CSV output (variables table)
-nc2parquet info s3://bucket/data.nc --detailed    # Works with S3 files too
+# JSON output for scripting
+nc2parquet info examples/data/pres_temp_4D.nc --format json
 
-# Generate shell completions
-nc2parquet completions bash > ~/.bash_completion.d/nc2parquet
+# Variable-specific detail
+nc2parquet info examples/data/pres_temp_4D.nc -n temperature --detailed
 ```
 
 ### Library Usage
 
-**Basic Conversion:**
-
 ```rust
-use nc2parquet::{JobConfig, process_netcdf_job_async};
+use nc2parquet::input::JobConfig;
+use nc2parquet::process_netcdf_job_async;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = JobConfig::from_json(r#"
-    {
-        "nc_key": "data/temperature.nc",
-        "variable_name": "temperature",
-        "parquet_key": "output/temperature.parquet",
-        "filters": [
-            {
-                "kind": "range",
-                "params": {
-                    "dimension_name": "latitude",
-                    "min_value": 30.0,
-                    "max_value": 60.0
-                }
-            }
-        ]
-    }
-    "#)?;
+    let config = JobConfig::from_json(r#"{
+        "nc_key": "examples/data/simple_xy.nc",
+        "variable_name": "data",
+        "parquet_key": "output.parquet",
+        "filters": []
+    }"#)?;
 
     process_netcdf_job_async(&config).await?;
     Ok(())
 }
 ```
 
-**S3 and Post-Processing:**
+## CLI Reference
 
-```rust
-use nc2parquet::{JobConfig, process_netcdf_job_async};
-use nc2parquet::postprocess::*;
-use std::collections::HashMap;
+| Subcommand    | Description                                                                      |
+| ------------- | -------------------------------------------------------------------------------- |
+| `convert`     | Convert a NetCDF file (or glob of files) to Parquet                              |
+| `validate`    | Validate a configuration file without processing any data                        |
+| `info`        | Inspect NetCDF file structure, dimensions, variables, and metadata               |
+| `template`    | Generate a configuration file template (basic, s3, multi-filter, weather, ocean) |
+| `completions` | Emit shell completion scripts (bash, zsh, fish, PowerShell)                      |
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = JobConfig {
-        nc_key: "s3://my-bucket/weather-data.nc".to_string(),
-        variable_name: "temperature".to_string(),
-        parquet_key: "s3://output-bucket/processed-temp.parquet".to_string(),
-        filters: vec![
-            // Spatial filter for North America
-            FilterConfig::Range {
-                params: RangeParams {
-                    dimension_name: "latitude".to_string(),
-                    min_value: 25.0,
-                    max_value: 70.0,
-                }
-            },
-            FilterConfig::Range {
-                params: RangeParams {
-                    dimension_name: "longitude".to_string(),
-                    min_value: -140.0,
-                    max_value: -60.0,
-                }
-            },
-        ],
-        postprocessing: Some(ProcessingPipelineConfig {
-            name: Some("Weather Data Processing".to_string()),
-            processors: vec![
-                // Rename columns
-                ProcessorConfig::RenameColumns {
-                    mappings: {
-                        let mut map = HashMap::new();
-                        map.insert("temperature".to_string(), "temp_kelvin".to_string());
-                        map
-                    },
-                },
-                // Convert Kelvin to Celsius
-                ProcessorConfig::UnitConvert {
-                    column: "temp_kelvin".to_string(),
-                    from_unit: "kelvin".to_string(),
-                    to_unit: "celsius".to_string(),
-                },
-                // Add computed column
-                ProcessorConfig::ApplyFormula {
-                    target_column: "temp_fahrenheit".to_string(),
-                    formula: "temp_kelvin * 1.8 - 459.67".to_string(),
-                    source_columns: vec!["temp_kelvin".to_string()],
-                },
-            ],
-        }),
-    };
+Global flags available on every subcommand:
 
-    process_netcdf_job_async(&config).await?;
-    Ok(())
-}
-```
+| Flag                   | Env variable        | Description                                              |
+| ---------------------- | ------------------- | -------------------------------------------------------- |
+| `-v / --verbose`       |                     | Enable debug logging                                     |
+| `-q / --quiet`         |                     | Suppress all output except errors                        |
+| `--output-format`      |                     | Structured output format: `human`, `json`, `yaml`, `csv` |
+| `-c / --config <FILE>` | `NC2PARQUET_CONFIG` | Load a JSON or YAML configuration file                   |
 
-## File Information and Inspection
+Key `convert` flags:
 
-The `info` subcommand provides comprehensive NetCDF file analysis capabilities:
+| Flag                              | Env variable                 | Description                                               |
+| --------------------------------- | ---------------------------- | --------------------------------------------------------- |
+| `-n / --variable <NAME>`          | `NC2PARQUET_VARIABLE`        | Single variable name to extract                           |
+| `-N / --variables <A,B,...>`      |                              | Comma-separated list of variables (multi-column output)   |
+| `--glob <PATTERN>`                |                              | Glob pattern for batch processing                         |
+| `--range <DIM:MIN:MAX>`           | `NC2PARQUET_RANGE_FILTERS`   | Range filter (repeatable)                                 |
+| `--list <DIM:V1,V2,...>`          | `NC2PARQUET_LIST_FILTERS`    | List filter (repeatable)                                  |
+| `--point2d <DIMS:LAT,LON:TOL>`    | `NC2PARQUET_POINT2D_FILTERS` | 2D spatial point filter (repeatable)                      |
+| `--point3d <DIMS:T,LAT,LON:TOL>`  | `NC2PARQUET_POINT3D_FILTERS` | 3D spatiotemporal point filter (repeatable)               |
+| `--compression <CODEC>`           |                              | `snappy` (default), `zstd`, `gzip`, `lz4`, `uncompressed` |
+| `--compression-level <N>`         |                              | Zstd: 1–22; Gzip: 0–9                                     |
+| `--row-group-size <ROWS>`         |                              | Maximum rows per Parquet row group                        |
+| `--no-statistics`                 |                              | Disable column statistics (min, max, null count)          |
+| `--rename <OLD:NEW>`              |                              | Rename output column (repeatable)                         |
+| `--unit-convert <COL:FROM:TO>`    |                              | Unit conversion (repeatable)                              |
+| `--kelvin-to-celsius <COL>`       |                              | Shortcut: convert column from Kelvin to Celsius           |
+| `--formula <TARGET:EXPR:SOURCES>` |                              | Apply formula to create a new column (repeatable)         |
+| `--dry-run`                       | `NC2PARQUET_DRY_RUN`         | Validate and plan without writing output                  |
+| `--force`                         | `NC2PARQUET_FORCE`           | Overwrite existing output files                           |
 
-### Basic Usage
+## Configuration
+
+Settings are resolved in the following priority order (highest wins):
+
+1. CLI arguments
+2. Environment variables (`NC2PARQUET_*`)
+3. Configuration file (`-c / --config`)
+
+Both JSON and YAML formats are supported. Generate a starter template with:
 
 ```bash
-# Display file structure and metadata
-nc2parquet info temperature_data.nc
+nc2parquet template basic -o config.json
+nc2parquet template s3 --format yaml -o s3.yaml
 ```
 
-**Output:**
-
-```
-NetCDF File Information:
-  Path: temperature_data.nc
-  File Size: 2.73 MB
-  Dimensions: 4 total
-    level (2)
-    latitude (6)
-    longitude (12)
-    time (2, unlimited)
-  Variables: 4 total
-    latitude (Float(F32)) - dimensions: [latitude]
-      @units: Str("degrees_north")
-    longitude (Float(F32)) - dimensions: [longitude]
-      @units: Str("degrees_east")
-    pressure (Float(F32)) - dimensions: [time, level, latitude, longitude]
-      @units: Str("hPa")
-    temperature (Float(F32)) - dimensions: [time, level, latitude, longitude]
-      @units: Str("celsius")
-```
-
-### Advanced Features
-
-**Detailed Information:**
-
-```bash
-# Include global attributes and extended metadata
-nc2parquet info data.nc --detailed
-```
-
-**Variable-Specific Analysis:**
-
-```bash
-# Focus on a specific variable
-nc2parquet info ocean_data.nc --variable sea_surface_temperature
-```
-
-**Multiple Output Formats:**
-
-```bash
-# JSON format for programmatic use
-nc2parquet info data.nc --format json > file_info.json
-
-# YAML format for human-readable structured output
-nc2parquet info data.nc --format yaml
-
-# CSV format for variable analysis (tabular data)
-nc2parquet info data.nc --format csv > variables.csv
-```
-
-**Cloud Storage Support:**
-
-```bash
-# Analyze S3-hosted NetCDF files directly
-nc2parquet info s3://climate-data/global_temperature.nc --detailed
-```
-
-### JSON Output Structure
-
-The JSON output provides a complete machine-readable representation:
-
-```json
-{
-  "path": "temperature_data.nc",
-  "file_size": 2784,
-  "total_dimensions": 4,
-  "total_variables": 4,
-  "dimensions": [
-    {
-      "name": "level",
-      "length": 2,
-      "is_unlimited": false
-    },
-    {
-      "name": "time",
-      "length": 2,
-      "is_unlimited": true
-    }
-  ],
-  "variables": [
-    {
-      "name": "temperature",
-      "data_type": "Float(F32)",
-      "dimensions": ["time", "level", "latitude", "longitude"],
-      "shape": [2, 2, 6, 12],
-      "attributes": {
-        "units": "Str(\"celsius\")"
-      }
-    }
-  ],
-  "global_attributes": {}
-}
-```
-
-## Storage Support
-
-nc2parquet supports both local filesystem and Amazon S3 storage:
-
-### Local Files
-
-```json
-{
-  "nc_key": "/path/to/input.nc",
-  "parquet_key": "/path/to/output.parquet"
-}
-```
-
-### Amazon S3
-
-```json
-{
-  "nc_key": "s3://my-bucket/path/to/input.nc",
-  "parquet_key": "s3://my-bucket/path/to/output.parquet"
-}
-```
-
-### Mixed Storage
-
-```json
-{
-  "nc_key": "s3://input-bucket/data.nc",
-  "parquet_key": "/local/path/output.parquet"
-}
-```
-
-## AWS Configuration
-
-For S3 support, configure AWS credentials using any of these methods:
-
-### Environment Variables
-
-```bash
-export AWS_ACCESS_KEY_ID=your_access_key
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=us-east-1
-```
-
-### AWS Credentials File
-
-```ini
-# ~/.aws/credentials
-[default]
-aws_access_key_id = your_access_key
-aws_secret_access_key = your_secret_key
-
-# ~/.aws/config
-[default]
-region = us-east-1
-```
-
-### IAM Roles
-
-When running on AWS infrastructure (EC2, Lambda, ECS), IAM roles are automatically used.
+See [`examples/configs/`](examples/configs/) for complete annotated examples covering
+single-file, multi-filter, and S3 scenarios.
 
 ## Filter Types
 
-nc2parquet supports four types of filters that can be combined for precise data extraction:
+All specified filters are intersected — a data point must satisfy every filter to be included.
 
-### 1. Range Filter
+| Filter     | CLI flag    | Selects                                            | Format                                |
+| ---------- | ----------- | -------------------------------------------------- | ------------------------------------- |
+| `range`    | `--range`   | Dimension values within `[min, max]`               | `DIM:MIN:MAX`                         |
+| `list`     | `--list`    | Specific discrete dimension values                 | `DIM:V1,V2,...`                       |
+| `2d_point` | `--point2d` | Grid cells within `tolerance` of (lat, lon) points | `LAT_DIM,LON_DIM:LAT,LON:TOL`         |
+| `3d_point` | `--point3d` | Time steps + spatial cells within `tolerance`      | `T_DIM,LAT_DIM,LON_DIM:T,LAT,LON:TOL` |
 
-Selects values within a numeric range:
+See [`examples/configs/`](examples/configs/) for JSON/YAML filter configuration examples.
 
-```json
-{
-  "kind": "range",
-  "params": {
-    "dimension_name": "temperature",
-    "min_value": -10.0,
-    "max_value": 35.0
-  }
-}
-```
+## Post-Processing
 
-### 2. List Filter
+Processors run sequentially after extraction. Results from earlier steps are available to later steps.
 
-Selects specific discrete values:
+| Processor         | CLI flag              | Description                                         |
+| ----------------- | --------------------- | --------------------------------------------------- |
+| Rename columns    | `--rename`            | Rename one or more output DataFrame columns         |
+| Unit conversion   | `--unit-convert`      | Convert a column between physical units             |
+| Kelvin to Celsius | `--kelvin-to-celsius` | Shortcut for the common temperature conversion      |
+| Apply formula     | `--formula`           | Create a new column using a mathematical expression |
+| DateTime convert  | config only           | Convert a numeric time offset to a datetime column  |
 
-```json
-{
-  "kind": "list",
-  "params": {
-    "dimension_name": "pressure_level",
-    "values": [850.0, 500.0, 200.0]
-  }
-}
-```
+See [`examples/postprocessing/`](examples/postprocessing/) for complete pipeline examples.
 
-### 3. 2D Point Filter
+## Storage
 
-Selects spatial coordinates with tolerance:
-
-```json
-{
-  "kind": "2d_point",
-  "params": {
-    "lat_dimension_name": "latitude",
-    "lon_dimension_name": "longitude",
-    "points": [
-      [40.7, -74.0],
-      [51.5, -0.1]
-    ],
-    "tolerance": 0.1
-  }
-}
-```
-
-### 4. 3D Point Filter
-
-Selects spatiotemporal coordinates:
-
-```json
-{
-  "kind": "3d_point",
-  "params": {
-    "time_dimension_name": "time",
-    "lat_dimension_name": "latitude",
-    "lon_dimension_name": "longitude",
-    "steps": [0.0, 6.0, 12.0],
-    "points": [
-      [40.7, -74.0],
-      [51.5, -0.1]
-    ],
-    "tolerance": 0.1
-  }
-}
-```
-
-## Configuration Examples
-
-### Simple Weather Data Extraction
-
-```json
-{
-  "nc_key": "weather_data.nc",
-  "variable_name": "temperature",
-  "parquet_key": "temperature_filtered.parquet",
-  "filters": [
-    {
-      "kind": "range",
-      "params": {
-        "dimension_name": "latitude",
-        "min_value": 30.0,
-        "max_value": 45.0
-      }
-    }
-  ]
-}
-```
-
-### Multi-Filter Climate Analysis
-
-```json
-{
-  "nc_key": "s3://climate-data/global_temps.nc",
-  "variable_name": "temperature",
-  "parquet_key": "s3://results/urban_temps.parquet",
-  "filters": [
-    {
-      "kind": "range",
-      "params": {
-        "dimension_name": "time",
-        "min_value": 20200101.0,
-        "max_value": 20231231.0
-      }
-    },
-    {
-      "kind": "2d_point",
-      "params": {
-        "lat_dimension_name": "latitude",
-        "lon_dimension_name": "longitude",
-        "points": [
-          [40.7128, -74.006],
-          [34.0522, -118.2437],
-          [41.8781, -87.6298]
-        ],
-        "tolerance": 0.5
-      }
-    }
-  ]
-}
-```
-
-### Ocean Data Processing
-
-```json
-{
-  "nc_key": "s3://ocean-data/sst_2023.nc",
-  "variable_name": "sea_surface_temperature",
-  "parquet_key": "atlantic_sst.parquet",
-  "filters": [
-    {
-      "kind": "range",
-      "params": {
-        "dimension_name": "longitude",
-        "min_value": -80.0,
-        "max_value": -10.0
-      }
-    },
-    {
-      "kind": "range",
-      "params": {
-        "dimension_name": "latitude",
-        "min_value": 0.0,
-        "max_value": 70.0
-      }
-    },
-    {
-      "kind": "list",
-      "params": {
-        "dimension_name": "depth",
-        "values": [0.0, 5.0, 10.0]
-      }
-    }
-  ]
-}
-```
-
-## Performance Tips
-
-1. **Use S3 Transfer Acceleration** for faster uploads to S3
-2. **Apply filters early** to reduce data transfer and processing time
-3. **Use specific coordinates** rather than large ranges when possible
-4. **Consider data locality** - process data in the same AWS region as your S3 buckets
-
-## Error Handling
-
-The library provides detailed error messages for common issues:
-
-- **File not found**: Clear indication of missing input files (local or S3)
-- **Invalid NetCDF**: Detailed validation errors for malformed files
-- **Permission errors**: Specific AWS permission or filesystem access issues
-- **Configuration errors**: JSON parsing and validation errors with context
-
-## Testing
-
-Run the full test suite:
+Both local paths and S3 URIs are accepted anywhere a file path is expected:
 
 ```bash
-cargo test
+# Local to local
+nc2parquet convert data/input.nc output/result.parquet -n temperature
+
+# S3 to S3
+nc2parquet convert s3://input-bucket/data.nc s3://output-bucket/result.parquet -n temperature
+
+# Mixed
+nc2parquet convert s3://input-bucket/data.nc local_result.parquet -n temperature
 ```
 
-Run all tests (including S3 tests with public datasets):
-
-```bash
-cargo test --lib
-```
-
-The S3 integration tests now use public NOAA Climate Data Records and require no AWS credentials or configuration. The tests will automatically handle network connectivity issues gracefully.
-
-**Available S3 Tests:**
-
-- `test_public_s3_noaa_dataset_pipeline` - Full pipeline test using NOAA Total Solar Irradiance data
-- `test_noaa_s3_info_command` - Info command test with NOAA public dataset
-- `test_s3_storage_noaa_public_dataset` - Storage layer test with public S3 data
-- `test_storage_factory_noaa_public_dataset` - Storage factory test with public data
-
-To run only S3-related tests:
-
-```bash
-cargo test noaa -- --nocapture
-```
-
-## Configuration Sources
-
-nc2parquet supports multiple configuration sources with clear precedence:
-
-**Priority (highest to lowest):**
-
-1. CLI arguments
-2. Environment variables
-3. Configuration files
-
-### Environment Variables
-
-All CLI options can be set via environment variables with the `NC2PARQUET_` prefix:
-
-```bash
-# Core configuration
-export NC2PARQUET_INPUT="s3://my-bucket/data.nc"
-export NC2PARQUET_OUTPUT="s3://output-bucket/result.parquet"
-export NC2PARQUET_VARIABLE="temperature"
-export NC2PARQUET_CONFIG="/path/to/config.json"
-
-# Processing options
-export NC2PARQUET_FORCE=true
-export NC2PARQUET_DRY_RUN=true
-
-# Filter configuration
-export NC2PARQUET_RANGE_FILTERS="lat:30:60,lon:-120:-80"
-export NC2PARQUET_LIST_FILTERS="pressure:1000,850,500;level:1,2,3"
-export NC2PARQUET_POINT2D_FILTERS="lat,lon:40.7,-74.0:0.5"
-export NC2PARQUET_POINT3D_FILTERS="time,lat,lon:0.0,40.7,-74.0:0.1"
-
-# Override paths for specific scenarios
-export NC2PARQUET_INPUT_OVERRIDE="/alternative/input.nc"
-export NC2PARQUET_OUTPUT_OVERRIDE="/alternative/output.parquet"
-```
-
-### Configuration Files
-
-Support both JSON and YAML formats with automatic detection:
-
-```bash
-nc2parquet convert --config config.json
-nc2parquet convert --config config.yaml
-```
-
-## Post-Processing Framework
-
-Transform DataFrames after extraction with built-in processors:
-
-### Available Processors
-
-1. **Column Renaming**
-
-   ```bash
-   --rename "old_name:new_name,temperature:temp_k"
-   ```
-
-2. **Unit Conversion**
-
-   ```bash
-   --unit-convert "temperature:kelvin:celsius"
-   --kelvin-to-celsius temperature  # Shortcut for Kelvin→Celsius
-   ```
-
-3. **Formula Application**
-
-   ```bash
-   --formula "temp_f:temp_c * 1.8 + 32"
-   --formula "heat_index:temp + humidity * 0.1"
-   ```
-
-4. **DateTime Conversion** (configuration only)
-5. **Data Aggregation** (configuration only)
-
-### Post-Processing Configuration
-
-```json
-{
-  "nc_key": "weather.nc",
-  "variable_name": "temperature",
-  "parquet_key": "processed.parquet",
-  "postprocessing": {
-    "name": "Weather Data Pipeline",
-    "processors": [
-      {
-        "type": "rename_columns",
-        "mappings": {
-          "temperature": "temp_k",
-          "lat": "latitude",
-          "lon": "longitude"
-        }
-      },
-      {
-        "type": "unit_convert",
-        "column": "temp_k",
-        "from_unit": "kelvin",
-        "to_unit": "celsius"
-      },
-      {
-        "type": "apply_formula",
-        "target_column": "temp_fahrenheit",
-        "formula": "temp_k * 1.8 - 459.67",
-        "source_columns": ["temp_k"]
-      },
-      {
-        "type": "datetime_convert",
-        "column": "time",
-        "base": "2000-01-01T00:00:00Z",
-        "unit": "hours"
-      }
-    ]
-  }
-}
-```
-
-### Pipeline Chaining
-
-Processors are executed sequentially, allowing complex transformations:
-
-```bash
-nc2parquet convert weather.nc result.parquet \
-  --variable temperature \
-  --rename "temperature:temp_k,lat:latitude" \
-  --kelvin-to-celsius temp_k \
-  --formula "temp_f:temp_k*1.8+32" \
-  --formula "heat_index:temp_k+humidity*0.05"
-```
-
-## Architecture
-
-nc2parquet uses a modular architecture:
-
-- **Storage Layer**: Unified interface for local and S3 operations
-- **Filter System**: Composable filters with intersection logic
-- **Processing Pipeline**: Efficient async processing with minimal memory usage
-- **Configuration**: Type-safe JSON configuration with validation
+AWS credentials are resolved automatically via the standard AWS credential chain
+(environment variables, `~/.aws/credentials`, IAM instance roles, etc.).
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and add tests
-4. Ensure tests pass: `cargo test`
-5. Submit a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branch conventions, and the pull request process.
 
-## Roadmap
+## Changelog
 
-- **Sprint 2**: CLI application with argument parsing and configuration management
-- **Sprint 3**: Advanced post-processing with data aggregation and statistics
-- **Sprint 4**: Performance optimizations and streaming processing
-- **Sprint 5**: Extended cloud support (GCS, Azure Blob Storage)
-- **Sprint 6**: Monitoring and logging improvements
-- **Sprint 7**: Advanced filtering and data transformation capabilities
+See [CHANGELOG.md](CHANGELOG.md) for release history and upgrade notes.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Public Dataset Integration
-
-nc2parquet includes comprehensive tests using the **NOAA Climate Data Record (CDR) for Total Solar Irradiance** from AWS Open Data:
-
-```bash
-# Analyze NOAA Total Solar Irradiance data
-nc2parquet info s3://noaa-cdr-total-solar-irradiance-pds/data/daily/tsi_v02r01_daily_s18820101_e18821231_c20170717.nc
-
-# Convert NOAA data with filtering
-nc2parquet convert \
-  s3://noaa-cdr-total-solar-irradiance-pds/data/daily/tsi_v02r01_daily_s18820101_e18821231_c20170717.nc \
-  solar_irradiance_1882.parquet \
-  --variable TSI \
-  --range "time:99346:99350"
-```
-
-This public dataset provides:
-
-- **365 daily measurements** of Total Solar Irradiance for 1882
-- **No AWS credentials required** - publicly accessible
-- **Real-world NetCDF-4/HDF5 format** for testing
-- **Scientific metadata** including units, uncertainty values, and CF-compliant attributes
-
-The integration demonstrates nc2parquet's capability to process real climate science data from cloud storage seamlessly.
-
-## Examples
-
-The `examples/` directory contains sample NetCDF files and configuration examples:
-
-- `examples/data/simple_xy.nc`: Simple 2D test data
-- `examples/data/pres_temp_4D.nc`: 4D weather data with time series
-- `examples/configs/`: Sample configuration files for various use cases
+[MIT](LICENSE)

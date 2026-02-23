@@ -11,15 +11,20 @@ repository = "https://github.com/rjmalves/nc2parquet"
 keywords = ["netcdf", "parquet", "climate", "data", "conversion"]
 categories = ["command-line-utilities", "science", "data-structures"]
 
+[features]
+dhat-heap = ["dep:dhat"]
+
 [[bin]]
 name = "nc2parquet"
 path = "src/main.rs"
 
 [dependencies]
+dhat = { version = "0.3", optional = true }
 aws-config = "1.8.6"
 aws-sdk-s3 = "1.106.0"
 netcdf = { version = "0.11.0", features = ["static"] }
-polars = { version = "0.51.0", features = ["lazy", "parquet"] }
+polars = { version = "0.51.0", features = ["lazy", "parquet", "abs", "trigonometry", "round_series", "log"] }
+polars-ops = { version = "0.51.0", features = ["round_series"] }
 serde = "1.0.226"
 serde_json = "1.0.145"
 serde_yaml = "0.9"
@@ -34,6 +39,7 @@ clap_complete = "4.4"
 env_logger = "0.11"
 log = "0.4"
 indicatif = "0.17"
+glob = "0.3"
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -41,6 +47,26 @@ testcontainers = { version = "0.22", features = ["blocking"] }
 testcontainers-modules = { version = "0.10", features = ["localstack"] }
 tokio-test = "0.4"
 aws-credential-types = "1.2"
+proptest = "1.4"
+assert_cmd = "2.0"
+predicates = "3.1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "extraction_bench"
+harness = false
+
+[[bench]]
+name = "filter_bench"
+harness = false
+
+[[bench]]
+name = "postprocess_bench"
+harness = false
+
+[[bench]]
+name = "combination_bench"
+harness = false
 
 # The profile that 'dist' will build with
 [profile.dist]

@@ -26,4 +26,4 @@ target
 /target
 
 # Data file formats
-*.parquet
+*.parquetdhat-heap.json

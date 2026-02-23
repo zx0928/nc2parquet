@@ -12,10 +12,17 @@ env:
 jobs:
   test:
     name: Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        rust: [stable, beta]
+        include:
+          - os: ubuntu-latest
+            rust: stable
+          - os: ubuntu-latest
+            rust: beta
+          - os: macos-latest
+            rust: stable
 
     steps:
       - uses: actions/checkout@v4
@@ -37,19 +44,74 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install system dependencies
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y netcdf-bin libnetcdf-dev libhdf5-dev
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install netcdf
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- ${{ matrix.rust == 'stable' && '-D warnings' || '-W warnings' }}
 
-      - name: Run unit tests
+      - name: Run library tests
         run: cargo test --lib --verbose
+
+      - name: Run doc-tests
+        run: cargo test --doc --verbose
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-cov-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y netcdf-bin libnetcdf-dev libhdf5-dev
+
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Run coverage
+        continue-on-error: true
+        run: |
+          cargo tarpaulin --out xml --output-dir coverage \
+            --engine llvm \
+            --exclude-files "src/main.rs" "src/handlers/*" "src/test_helpers.rs" "src/tests/*" "benches/*" \
+            --skip-clean --lib
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/cobertura.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   security-audit:
     name: Security Audit
@@ -64,7 +126,7 @@ jobs:
           toolchain: stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Run security audit
         run: cargo audit

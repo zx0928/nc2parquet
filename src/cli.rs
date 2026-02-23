@@ -159,6 +159,33 @@ EXAMPLES:
         /// Apply mathematical formula: target_column:formula:source1,source2,...
         #[arg(long = "formula", value_parser = parse_formula)]
         formulas: Vec<FormulaArg>,
+
+        /// Extract multiple variables in one pass (comma-delimited, e.g. "temperature,pressure").
+        /// When set, all listed variables are written as separate columns into one Parquet file.
+        /// All variables must have the same dimensions as each other.
+        #[arg(short = 'N', long = "variables", value_delimiter = ',')]
+        variables: Vec<String>,
+
+        /// Process all files matching this glob pattern (e.g. "data/**/*.nc").
+        /// When set, the OUTPUT argument is treated as an output directory.
+        #[arg(long, value_name = "PATTERN")]
+        glob: Option<String>,
+
+        /// Parquet compression codec: snappy, zstd, gzip, lz4, uncompressed
+        #[arg(long, value_name = "CODEC")]
+        compression: Option<String>,
+
+        /// Compression level (Zstd: 1-22, Gzip: 0-9; not valid for snappy/lz4/uncompressed)
+        #[arg(long, value_name = "LEVEL")]
+        compression_level: Option<u32>,
+
+        /// Row group size in number of rows
+        #[arg(long, value_name = "ROWS")]
+        row_group_size: Option<usize>,
+
+        /// Disable writing column statistics (min, max, null count)
+        #[arg(long, default_value_t = false)]
+        no_statistics: bool,
     },
 
     /// Validate configuration file or arguments
@@ -787,40 +814,8 @@ pub(crate) fn parse_filters_from_env() -> FilterResult {
 /// Merges CLI filter arguments with filters parsed from environment variables.
 ///
 /// When a CLI argument list is non-empty it takes priority and the corresponding
-/// environment variable filters are ignored.  When a CLI argument list is empty,
+/// environment variable filters are ignored. When a CLI argument list is empty,
 /// the environment variable filters are used instead.
-///
-/// # Returns
-///
-/// Returns a tuple of `(range_filters, list_filters, point2d_filters, point3d_filters)`.
-///
-/// # Errors
-///
-/// Returns an error string if any environment variable contains a malformed
-/// filter specification.
-///
-/// # Examples
-///
-/// ```rust
-/// use nc2parquet::cli::{merge_filters, RangeFilterArg};
-///
-/// // With CLI arguments present, they take priority
-/// let cli_range = vec![RangeFilterArg {
-///     dimension: "latitude".to_string(),
-///     min_value: 30.0,
-///     max_value: 60.0,
-/// }];
-///
-/// let (range, _list, _pt2d, _pt3d) = merge_filters(
-///     cli_range,
-///     vec![],
-///     vec![],
-///     vec![],
-/// ).unwrap();
-///
-/// assert_eq!(range.len(), 1);
-/// assert_eq!(range[0].dimension, "latitude");
-/// ```
 pub fn merge_filters(
     cli_range: Vec<RangeFilterArg>,
     cli_list: Vec<ListFilterArg>,

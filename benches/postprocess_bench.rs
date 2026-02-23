@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use nc2parquet::postprocess::{
     AggregationOp, Aggregator, ColumnRenamer, DateTimeConverter, FormulaApplier, PostProcessor,
     ProcessingPipeline, TimeUnit, UnitConverter,

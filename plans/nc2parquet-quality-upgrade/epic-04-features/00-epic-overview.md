@@ -25,11 +25,13 @@ This epic covers functional enhancements to the library and CLI. It does NOT cov
 
 | ID         | Title                                                  | Points | Confidence |
 | ---------- | ------------------------------------------------------ | ------ | ---------- |
-| ticket-019 | Extend UnitConverter with Meteorological Unit Families | 3      | Low        |
-| ticket-020 | Add Glob Pattern Support for Batch File Processing     | 5      | Low        |
-| ticket-021 | Support Multi-Variable Extraction in Single Pass       | 5      | Low        |
-| ticket-022 | Add Parquet Output Configuration Options               | 3      | Low        |
-| ticket-023 | Extend Formula Parser with Mathematical Functions      | 3      | Low        |
+| ticket-019 | Extend UnitConverter with Meteorological Unit Families | 2      | High       |
+| ticket-020 | Add Glob Pattern Support for Batch File Processing     | 4      | High       |
+| ticket-021 | Support Multi-Variable Extraction in Single Pass       | 4      | Medium     |
+| ticket-022 | Add Parquet Output Configuration Options               | 2      | High       |
+| ticket-023 | Extend Formula Parser with Mathematical Functions      | 3      | Medium     |
+
+**Total**: 15 points (reduced from original 19 estimate after codebase inspection)
 
 ## Success Criteria
 

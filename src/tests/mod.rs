@@ -1,9 +1,11 @@
+mod test_batch;
 mod test_cli;
 mod test_extract;
 mod test_filters;
 mod test_info;
 mod test_input;
 mod test_integration;
+mod test_multi_variable;
 mod test_output;
 mod test_postprocess;
 mod test_properties;

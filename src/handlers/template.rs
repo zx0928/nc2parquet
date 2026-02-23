@@ -6,7 +6,6 @@ use nc2parquet::{
     input::{FilterConfig, JobConfig, ListParams, RangeParams},
 };
 
-/// Handle the template subcommand
 pub async fn handle_template_command(cli: &Cli) -> Result<()> {
     if let Commands::Template {
         template_type,
@@ -32,26 +31,30 @@ pub async fn handle_template_command(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Generate configuration template
 pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) -> Result<String> {
     let config = match template_type {
         TemplateType::Basic => JobConfig {
             nc_key: "input.nc".to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: "output.parquet".to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         },
         TemplateType::S3 => JobConfig {
             nc_key: "s3://my-bucket/input.nc".to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: "s3://my-bucket/output.parquet".to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         },
         TemplateType::MultiFilter => JobConfig {
             nc_key: "weather_data.nc".to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: "filtered_weather.parquet".to_string(),
             filters: vec![
                 FilterConfig::Range {
@@ -69,10 +72,12 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             ],
             postprocessing: None,
+            output: None,
         },
         TemplateType::Weather => JobConfig {
             nc_key: "weather_station_data.nc".to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: "weather_analysis.parquet".to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -82,10 +87,12 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             }],
             postprocessing: None,
+            output: None,
         },
         TemplateType::Ocean => JobConfig {
             nc_key: "ocean_temperature.nc".to_string(),
             variable_name: "sea_surface_temperature".to_string(),
+            variable_names: None,
             parquet_key: "sst_analysis.parquet".to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -95,6 +102,7 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             }],
             postprocessing: None,
+            output: None,
         },
     };
 

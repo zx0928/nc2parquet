@@ -13,9 +13,11 @@ mod integration_tests {
         let config = JobConfig {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -37,6 +39,7 @@ mod integration_tests {
         let config = JobConfig {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -46,6 +49,7 @@ mod integration_tests {
                 },
             }],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -66,6 +70,7 @@ mod integration_tests {
         let config = JobConfig {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "pressure".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Point2D {
                 params: Point2DParams {
@@ -76,6 +81,7 @@ mod integration_tests {
                 },
             }],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -96,6 +102,7 @@ mod integration_tests {
         let config = JobConfig {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![
                 FilterConfig::Range {
@@ -113,6 +120,7 @@ mod integration_tests {
                 },
             ],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -197,6 +205,7 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -223,6 +232,7 @@ mod workflow_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -244,6 +254,7 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: crate::input::RangeParams {
@@ -269,6 +280,7 @@ mod workflow_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job_async(&config).await?;
@@ -290,6 +302,7 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -321,6 +334,7 @@ mod workflow_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -341,9 +355,11 @@ mod workflow_tests {
         let config = JobConfig {
             nc_key: "nonexistent_file.nc".to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         let result = crate::process_netcdf_job(&config);
@@ -358,9 +374,11 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "nonexistent_variable".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         let result = crate::process_netcdf_job(&config);
@@ -371,6 +389,7 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: crate::input::RangeParams {
@@ -380,6 +399,7 @@ mod workflow_tests {
                 },
             }],
             postprocessing: None,
+            output: None,
         };
 
         let result = crate::process_netcdf_job(&config);
@@ -399,9 +419,11 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -414,6 +436,7 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path2.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(crate::postprocess::ProcessingPipelineConfig {
@@ -433,6 +456,7 @@ mod workflow_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job(&config_with_processing)?;
@@ -457,9 +481,11 @@ mod workflow_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: sync_output.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -593,6 +619,7 @@ mod error_and_edge_case_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -612,6 +639,7 @@ mod error_and_edge_case_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         let result = crate::process_netcdf_job(&config);
@@ -670,6 +698,7 @@ mod error_and_edge_case_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -679,6 +708,7 @@ mod error_and_edge_case_tests {
                 },
             }],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -736,6 +766,7 @@ mod error_and_edge_case_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -746,6 +777,7 @@ mod error_and_edge_case_tests {
                     to_unit: "celsius".to_string(),
                 }],
             }),
+            output: None,
         };
 
         let result = crate::process_netcdf_job_async(&config).await;
@@ -769,6 +801,7 @@ mod error_and_edge_case_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "data".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -793,6 +826,7 @@ mod error_and_edge_case_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;
@@ -839,6 +873,7 @@ mod error_and_edge_case_tests {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -858,6 +893,7 @@ mod error_and_edge_case_tests {
                     },
                 ],
             }),
+            output: None,
         };
 
         crate::process_netcdf_job(&config)?;

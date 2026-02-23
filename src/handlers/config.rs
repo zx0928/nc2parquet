@@ -4,7 +4,6 @@ use std::path::Path;
 
 use nc2parquet::{cli::Cli, input::JobConfig};
 
-/// Load configuration from various sources
 pub fn load_configuration(
     cli: &Cli,
     input: &Option<String>,
@@ -17,26 +16,22 @@ pub fn load_configuration(
     let env_variable = std::env::var("NC2PARQUET_VARIABLE").ok();
 
     if let Some(config_path) = &cli.config {
-        debug!("Loading configuration from file: {}", config_path.display());
         let mut config = load_config_file(config_path)?;
 
         if let Some(env_input_path) = &env_input
             && input.is_none()
         {
             config.nc_key = env_input_path.clone();
-            debug!("Using input from environment: {}", env_input_path);
         }
         if let Some(env_output_path) = &env_output
             && output.is_none()
         {
             config.parquet_key = env_output_path.clone();
-            debug!("Using output from environment: {}", env_output_path);
         }
         if let Some(env_var_name) = &env_variable
             && variable.is_none()
         {
             config.variable_name = env_var_name.clone();
-            debug!("Using variable from environment: {}", env_var_name);
         }
 
         if let Some(input_path) = input {
@@ -72,13 +67,14 @@ pub fn load_configuration(
     Ok(JobConfig {
         nc_key: input_path.clone(),
         variable_name: var_name.clone(),
+        variable_names: None,
         parquet_key: output_path.clone(),
         filters: Vec::new(),
         postprocessing: None,
+        output: None,
     })
 }
 
-/// Load configuration file (JSON or YAML)
 pub fn load_config_file(path: &Path) -> Result<JobConfig> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read configuration file: {}", path.display()))?;

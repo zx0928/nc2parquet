@@ -25,9 +25,11 @@ mod memory_profile {
                 .to_string_lossy()
                 .to_string(),
             variable_name: "temperature".to_string(),
+            variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
+            output: None,
         };
 
         crate::process_netcdf_job(&config)

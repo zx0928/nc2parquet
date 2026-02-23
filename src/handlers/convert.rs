@@ -1,12 +1,11 @@
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, info};
-use std::collections::HashMap;
-
+use log::info;
 use nc2parquet::{
     cli::{Cli, Commands},
+    input::{BatchConfig, CompressionCodec, OutputConfig},
     postprocess::{ProcessingPipelineConfig, ProcessorConfig},
-    process_netcdf_job, process_netcdf_job_async,
+    process_netcdf_batch, process_netcdf_job, process_netcdf_job_async,
 };
 
 use super::config::load_configuration;
@@ -34,20 +33,79 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         unit_conversions,
         kelvin_to_celsius,
         formulas,
+        variables,
+        glob,
+        compression,
+        compression_level,
+        row_group_size,
+        no_statistics,
     } = &cli.command
     {
         info!("Starting NetCDF to Parquet conversion");
+
+        if let Some(pattern) = glob {
+            info!("Batch mode: glob pattern '{}'", pattern);
+
+            // The output positional argument is treated as the output directory in glob mode.
+            let output_dir = output
+                .as_deref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "OUTPUT argument is required as the output directory in glob mode"
+                    )
+                })?
+                .to_string();
+
+            let variable_name = variable
+                .as_deref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Variable name (-n / --variable) is required in glob mode")
+                })?
+                .to_string();
+
+            let batch_config = BatchConfig {
+                pattern: pattern.clone(),
+                output_dir,
+                variable_name,
+                filters: vec![],
+                postprocessing: None,
+                output_template: None,
+                output: None,
+                fail_fast: false,
+            };
+
+            let result = process_netcdf_batch(&batch_config).context("Batch processing failed")?;
+
+            if !cli.quiet {
+                println!(
+                    "Batch complete: {}/{} files succeeded, {} failed",
+                    result.succeeded.len(),
+                    result.total_files,
+                    result.failed.len()
+                );
+                for path in &result.succeeded {
+                    println!("  OK  {}", path);
+                }
+                for (path, err) in &result.failed {
+                    println!("  ERR {} — {}", path, err);
+                }
+            }
+
+            return Ok(());
+        }
 
         let mut config = load_configuration(cli, input, output, variable)?;
 
         if let Some(input_path) = input_override {
             config.nc_key = input_path.clone();
-            debug!("Overriding input path: {}", input_path);
         }
 
         if let Some(output_path) = output_override {
             config.parquet_key = output_path.clone();
-            debug!("Overriding output path: {}", output_path);
+        }
+
+        if !variables.is_empty() {
+            config.variable_names = Some(variables.clone());
         }
 
         let (
@@ -63,50 +121,17 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         )
         .map_err(|e| anyhow::anyhow!("Filter parsing error: {}", e))?;
 
-        for range_filter in &merged_range_filters {
-            let filter_config = range_filter.clone().into();
-            config.filters.push(filter_config);
-            debug!(
-                "Added range filter: {}:{}-{}",
-                range_filter.dimension, range_filter.min_value, range_filter.max_value
-            );
+        for filter in &merged_range_filters {
+            config.filters.push(filter.clone().into());
         }
-
-        for list_filter in &merged_list_filters {
-            let filter_config = list_filter.clone().into();
-            config.filters.push(filter_config);
-            debug!(
-                "Added list filter: {}:{:?}",
-                list_filter.dimension, list_filter.values
-            );
+        for filter in &merged_list_filters {
+            config.filters.push(filter.clone().into());
         }
-
-        for point2d_filter in &merged_point2d_filters {
-            let filter_config = point2d_filter.clone().into();
-            config.filters.push(filter_config);
-            debug!(
-                "Added 2D point filter: {},{} at ({},{}) tolerance={}",
-                point2d_filter.lat_dimension,
-                point2d_filter.lon_dimension,
-                point2d_filter.lat,
-                point2d_filter.lon,
-                point2d_filter.tolerance
-            );
+        for filter in &merged_point2d_filters {
+            config.filters.push(filter.clone().into());
         }
-
-        for point3d_filter in &merged_point3d_filters {
-            let filter_config = point3d_filter.clone().into();
-            config.filters.push(filter_config);
-            debug!(
-                "Added 3D point filter: {},{},{} at ({},{},{}) tolerance={}",
-                point3d_filter.time_dimension,
-                point3d_filter.lat_dimension,
-                point3d_filter.lon_dimension,
-                point3d_filter.time,
-                point3d_filter.lat,
-                point3d_filter.lon,
-                point3d_filter.tolerance
-            );
+        for filter in &merged_point3d_filters {
+            config.filters.push(filter.clone().into());
         }
 
         if !rename_columns.is_empty()
@@ -117,14 +142,10 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             let mut processors = Vec::new();
 
             if !rename_columns.is_empty() {
-                let mut mappings = HashMap::new();
-                for rename in rename_columns.iter() {
-                    mappings.insert(rename.old_name.clone(), rename.new_name.clone());
-                    debug!(
-                        "Added column rename: {} -> {}",
-                        rename.old_name, rename.new_name
-                    );
-                }
+                let mappings = rename_columns
+                    .iter()
+                    .map(|r| (r.old_name.clone(), r.new_name.clone()))
+                    .collect();
                 processors.push(ProcessorConfig::RenameColumns { mappings });
             }
 
@@ -134,10 +155,6 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
                     from_unit: unit_conversion.from_unit.clone(),
                     to_unit: unit_conversion.to_unit.clone(),
                 });
-                debug!(
-                    "Added unit conversion: {} from {} to {}",
-                    unit_conversion.column, unit_conversion.from_unit, unit_conversion.to_unit
-                );
             }
 
             for column in kelvin_to_celsius {
@@ -146,7 +163,6 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
                     from_unit: "kelvin".to_string(),
                     to_unit: "celsius".to_string(),
                 });
-                debug!("Added Kelvin to Celsius conversion for column: {}", column);
             }
 
             for formula in formulas.iter() {
@@ -155,23 +171,45 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
                     formula: formula.formula.clone(),
                     source_columns: formula.source_columns.clone(),
                 });
-                debug!(
-                    "Added formula: {} = {} (sources: {:?})",
-                    formula.target_column, formula.formula, formula.source_columns
-                );
             }
 
             if !processors.is_empty() {
-                let pipeline_config = ProcessingPipelineConfig {
+                config.postprocessing = Some(ProcessingPipelineConfig {
                     name: Some("CLI Pipeline".to_string()),
                     processors,
-                };
-                config.postprocessing = Some(pipeline_config);
-                info!(
-                    "Created post-processing pipeline with {} processors",
-                    config.postprocessing.as_ref().unwrap().processors.len()
-                );
+                });
             }
+        }
+
+        let any_compression_flag = compression.is_some()
+            || compression_level.is_some()
+            || row_group_size.is_some()
+            || *no_statistics;
+        if any_compression_flag {
+            let codec = match compression.as_deref().unwrap_or("snappy") {
+                "snappy" => CompressionCodec::Snappy,
+                "zstd" => CompressionCodec::Zstd,
+                "gzip" => CompressionCodec::Gzip,
+                "lz4" => CompressionCodec::Lz4,
+                "uncompressed" => CompressionCodec::Uncompressed,
+                other => {
+                    return Err(anyhow::anyhow!(
+                        "Unknown compression codec '{}'. Valid values: snappy, zstd, gzip, lz4, uncompressed",
+                        other
+                    ));
+                }
+            };
+            let output_cfg = OutputConfig {
+                compression: codec,
+                compression_level: *compression_level,
+                row_group_size: *row_group_size,
+                data_page_size: None,
+                statistics: !no_statistics,
+            };
+            output_cfg
+                .validate()
+                .map_err(|e| anyhow::anyhow!("Output config error: {}", e))?;
+            config.output = Some(output_cfg);
         }
 
         validate_config(&config).await?;
@@ -187,7 +225,12 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         }
 
         info!("Processing: {} -> {}", config.nc_key, config.parquet_key);
-        info!("Variable: {}", config.variable_name);
+        let eff_vars = config.effective_variable_names();
+        if eff_vars.len() == 1 {
+            info!("Variable: {}", eff_vars[0]);
+        } else {
+            info!("Variables: {:?}", eff_vars);
+        }
         info!("Filters: {} configured", config.filters.len());
 
         let progress = if cli.quiet {

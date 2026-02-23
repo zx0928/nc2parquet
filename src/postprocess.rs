@@ -26,7 +26,9 @@
 
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
+use polars::lazy::dsl::{max_horizontal, min_horizontal};
 use polars::prelude::*;
+use polars_ops::prelude::RoundMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -127,9 +129,7 @@ pub struct ProcessingPipelineConfig {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProcessorConfig {
     /// Rename one or more columns using an `old_name -> new_name` mapping.
-    RenameColumns {
-        mappings: HashMap<String, String>,
-    },
+    RenameColumns { mappings: HashMap<String, String> },
     /// Convert a numeric time-offset column to a [`DataType::Datetime`] column.
     DatetimeConvert {
         column: String,
@@ -311,8 +311,7 @@ impl ProcessingPipeline {
                         .collect();
 
                     if batch_columns.is_disjoint(&next_cols)
-                        && let Some(next_exprs) =
-                            self.processors[batch_end].to_lazy_expr(schema)
+                        && let Some(next_exprs) = self.processors[batch_end].to_lazy_expr(schema)
                     {
                         batch_exprs.extend(next_exprs);
                         batch_columns.extend(next_cols);
@@ -465,9 +464,18 @@ pub struct Aggregator {
 
 /// Creates or overwrites a column by evaluating a formula string.
 ///
-/// Supported syntax: arithmetic (`+`, `-`, `*`, `/`), `sqrt(a)`,
-/// comparisons (`<`, `>`, `==`, `!=`, `<=`, `>=`), and `f64` literals.
-/// Operator precedence: `*`/`/` bind tighter than `+`/`-`.
+/// Supported syntax:
+/// - Arithmetic: `+`, `-`, `*`, `/` with standard precedence (`*`/`/` bind tighter than `+`/`-`).
+/// - Parenthesised sub-expressions: `(a + b) * c`.
+/// - Comparisons: `<`, `>`, `==`, `!=`, `<=`, `>=`.
+/// - Numeric literals and column names.
+/// - **Unary functions** (1 argument): `abs`, `sqrt`, `exp`, `ln`, `log10`,
+///   `sin`, `cos`, `tan`, `ceil`, `floor`, `round`.
+/// - **Binary functions** (2 arguments): `pow(base, exp)`, `min(a, b)`,
+///   `max(a, b)`, `log(value, base)`.
+///
+/// Function names are case-insensitive. Functions may be nested arbitrarily
+/// and combined with arithmetic, e.g. `abs(a - b) + pow(c, 2.0)`.
 pub struct FormulaApplier {
     target_column: String,
     formula: String,
@@ -487,6 +495,70 @@ impl DateTimeConverter {
             base_datetime,
             unit,
         }
+    }
+}
+
+/// Physical unit families used for automatic conversion factor calculation.
+///
+/// Each family has a designated base unit.  Conversion factors between any two
+/// members of the same family are derived from their individual base-unit factors,
+/// so adding a new unit requires only a single entry in [`unit_to_base_factor`].
+///
+/// Temperature is handled separately because it requires an offset (not just a
+/// scale), so its conversions remain as explicit match arms in
+/// [`UnitConverter::build_conversion_expr`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnitFamily {
+    /// Temperature (base: K).  Offset conversions handled separately.
+    Temperature,
+    /// Pressure (base: Pa).
+    Pressure,
+    /// Speed (base: m/s).
+    Speed,
+    /// Length (base: m).
+    Length,
+}
+
+/// Maps a lowercased unit alias to its [`UnitFamily`] and the multiplicative
+/// factor that converts **one unit of `alias`** into the family's base unit.
+///
+/// Examples
+/// - `"hpa"` → `(Pressure, 100.0)`  because 1 hPa = 100 Pa
+/// - `"km"` → `(Length, 1000.0)`    because 1 km = 1 000 m
+/// - `"kt"` → `(Speed, 1.0/1.943844)` because 1 kt ≈ 0.5144 m/s
+fn unit_to_base_factor(unit: &str) -> Option<(UnitFamily, f64)> {
+    match unit {
+        // ── Temperature (base: K) ──────────────────────────────────────────
+        "kelvin" | "k" => Some((UnitFamily::Temperature, 1.0)),
+        "celsius" | "c" => Some((UnitFamily::Temperature, 1.0)),
+        "fahrenheit" | "f" => Some((UnitFamily::Temperature, 1.0)),
+
+        // ── Pressure (base: Pa) ────────────────────────────────────────────
+        "pa" | "pascal" => Some((UnitFamily::Pressure, 1.0)),
+        "hpa" | "hectopascal" => Some((UnitFamily::Pressure, 100.0)),
+        "mbar" | "millibar" => Some((UnitFamily::Pressure, 100.0)),
+        "kpa" | "kilopascal" => Some((UnitFamily::Pressure, 1_000.0)),
+        "atm" | "atmosphere" => Some((UnitFamily::Pressure, 101_325.0)),
+        "inhg" => Some((UnitFamily::Pressure, 3_386.389)),
+        "mmhg" => Some((UnitFamily::Pressure, 133.322)),
+
+        // ── Speed (base: m/s) ──────────────────────────────────────────────
+        "m/s" | "ms" => Some((UnitFamily::Speed, 1.0)),
+        "km/h" | "kmh" => Some((UnitFamily::Speed, 1.0 / 3.6)),
+        "kt" | "knot" | "knots" => Some((UnitFamily::Speed, 1.0 / 1.943_844)),
+        "mph" => Some((UnitFamily::Speed, 1.0 / 2.236_936)),
+        "ft/s" | "fts" => Some((UnitFamily::Speed, 1.0 / 3.280_84)),
+
+        // ── Length (base: m) ───────────────────────────────────────────────
+        "m" | "meter" | "metre" => Some((UnitFamily::Length, 1.0)),
+        "km" | "kilometer" => Some((UnitFamily::Length, 1_000.0)),
+        "ft" | "foot" | "feet" => Some((UnitFamily::Length, 0.304_8)),
+        "mi" | "mile" => Some((UnitFamily::Length, 1_609.344)),
+        "nm" | "nautical_mile" => Some((UnitFamily::Length, 1_852.0)),
+        "cm" | "centimeter" => Some((UnitFamily::Length, 0.01)),
+        "mm" | "millimeter" => Some((UnitFamily::Length, 0.001)),
+
+        _ => None,
     }
 }
 
@@ -516,15 +588,36 @@ impl UnitConverter {
         }
     }
 
+    /// Computes the multiplicative factor needed to convert `from_unit` values
+    /// into `to_unit` values.
+    ///
+    /// For non-temperature families the factor is derived from the base-unit
+    /// lookup: `factor = from_to_base / to_to_base`.
+    ///
+    /// Temperature conversions involve an additive offset and therefore cannot
+    /// be expressed as a pure scale factor; this function returns `1.0` for
+    /// temperature pairs, and [`build_conversion_expr`] handles them via
+    /// explicit match arms.
+    ///
+    /// Unknown or cross-family pairs also return `1.0` for backward compatibility.
     fn calculate_conversion_factor(from_unit: &str, to_unit: &str) -> f64 {
+        let from_lower = from_unit.to_lowercase();
+        let to_lower = to_unit.to_lowercase();
+
         match (
-            from_unit.to_lowercase().as_str(),
-            to_unit.to_lowercase().as_str(),
+            unit_to_base_factor(from_lower.as_str()),
+            unit_to_base_factor(to_lower.as_str()),
         ) {
-            ("kelvin", "celsius") | ("k", "c") => 1.0,
-            ("celsius", "kelvin") | ("c", "k") => 1.0,
-            ("celsius", "fahrenheit") | ("c", "f") => 9.0 / 5.0,
-            ("fahrenheit", "celsius") | ("f", "c") => 5.0 / 9.0,
+            (Some((from_family, from_base)), Some((to_family, to_base)))
+                if from_family == to_family =>
+            {
+                if from_family == UnitFamily::Temperature {
+                    // Offset conversions: scale is handled in build_conversion_expr.
+                    1.0
+                } else {
+                    from_base / to_base
+                }
+            }
             _ => 1.0,
         }
     }
@@ -768,7 +861,6 @@ impl PostProcessor for Aggregator {
         cols.extend(self.aggregations.keys().cloned());
         cols
     }
-
 }
 
 impl PostProcessor for FormulaApplier {
@@ -832,18 +924,10 @@ impl FormulaApplier {
             || formula.contains("!=")
         {
             self.parse_comparison_formula(df, formula)?
-        } else if formula.contains('+')
-            || formula.contains('-')
-            || formula.contains('*')
-            || formula.contains('/')
-        {
-            self.parse_arithmetic_formula(df, formula)?
-        } else if formula.starts_with("sqrt(") {
-            self.parse_function_formula(df, formula)?
         } else {
-            let operand_expr = self.parse_operand_with_validation(&df, formula)?;
+            let expr = self.parse_expression(&df, formula)?;
             df.lazy()
-                .with_columns([operand_expr.alias(&self.target_column)])
+                .with_columns([expr.alias(&self.target_column)])
                 .collect()?
         };
 
@@ -889,19 +973,6 @@ impl FormulaApplier {
             "Unable to parse comparison formula: {}",
             formula
         )))
-    }
-
-    fn parse_arithmetic_formula(
-        &self,
-        df: DataFrame,
-        formula: &str,
-    ) -> PostProcessResult<DataFrame> {
-        let expr = self.parse_expression(&df, formula)?;
-
-        Ok(df
-            .lazy()
-            .with_columns([expr.alias(&self.target_column)])
-            .collect()?)
     }
 
     fn parse_expression(&self, df: &DataFrame, expr: &str) -> PostProcessResult<Expr> {
@@ -956,31 +1027,204 @@ impl FormulaApplier {
         self.parse_factor(df, expr)
     }
 
+        /// Parse a factor: a function call, a parenthesised sub-expression, or a
+    /// bare operand (column name or numeric literal).
+    ///
+    /// Function calls are detected by `identifier(`. The matching closing
+    /// parenthesis is found with depth-counting to handle nested parens.
     fn parse_factor(&self, df: &DataFrame, expr: &str) -> PostProcessResult<Expr> {
         let expr = expr.trim();
 
+        // An identifier immediately followed by `(` is treated as a function call.
+        // If there is any operator or whitespace before the `(`, it is a
+        // parenthesised sub-expression, not a function call.
+        if let Some(paren_pos) = expr.find('(') {
+            let name = expr[..paren_pos].trim();
+            let is_identifier =
+                !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if is_identifier {
+                let mut depth: i32 = 0;
+                let mut close_pos = None;
+                for (i, c) in expr[paren_pos..].char_indices() {
+                    match c {
+                        '(' => depth += 1,
+                        ')' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                close_pos = Some(paren_pos + i);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                let close = close_pos.ok_or_else(|| {
+                    PostProcessError::ProcessingError(format!(
+                        "Unmatched '(' in function call '{}'",
+                        expr
+                    ))
+                })?;
+                let args_str = &expr[paren_pos + 1..close];
+                return self.parse_function_call(df, name, args_str);
+            }
+        }
+
+        // Parenthesised sub-expression: verify the parens match each other
+        // (guard against e.g. `(a) + (b)` reaching parse_factor).
         if expr.starts_with('(') && expr.ends_with(')') {
-            return self.parse_expression(df, &expr[1..expr.len() - 1]);
+            let mut depth: i32 = 0;
+            let mut matched_at_end = false;
+            let last = expr.len() - 1;
+            for (i, c) in expr.char_indices() {
+                match c {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 && i == last {
+                            matched_at_end = true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if matched_at_end {
+                return self.parse_expression(df, &expr[1..expr.len() - 1]);
+            }
         }
 
         self.parse_operand_with_validation(df, expr)
     }
 
-    fn parse_function_formula(&self, df: DataFrame, formula: &str) -> PostProcessResult<DataFrame> {
-        if formula.starts_with("sqrt(") && formula.ends_with(")") {
-            let inner = &formula[5..formula.len() - 1];
-            let operand = self.parse_operand_with_validation(&df, inner)?;
+    fn parse_function_call(
+        &self,
+        df: &DataFrame,
+        name: &str,
+        args_str: &str,
+    ) -> PostProcessResult<Expr> {
+        let func_name = name.to_lowercase();
+        let args = Self::split_function_args(args_str);
 
-            Ok(df
-                .lazy()
-                .with_columns([operand.sqrt().alias(&self.target_column)])
-                .collect()?)
-        } else {
-            Err(PostProcessError::ProcessingError(format!(
-                "Unsupported function in formula: {}",
-                formula
-            )))
+        match func_name.as_str() {
+            // ── Unary functions ──────────────────────────────────────────────
+            "abs" => {
+                check_arity("abs", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.abs())
+            }
+            "sqrt" => {
+                check_arity("sqrt", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.sqrt())
+            }
+            "exp" => {
+                check_arity("exp", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.exp())
+            }
+            "ln" => {
+                // ln(x) = log base e.  Polars .log(base: Expr) so we pass
+                // lit(std::f64::consts::E).
+                check_arity("ln", &args, 1)?;
+                Ok(self
+                    .parse_expression(df, &args[0])?
+                    .log(lit(std::f64::consts::E)))
+            }
+            "log10" => {
+                check_arity("log10", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.log(lit(10.0_f64)))
+            }
+            "sin" => {
+                check_arity("sin", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.sin())
+            }
+            "cos" => {
+                check_arity("cos", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.cos())
+            }
+            "tan" => {
+                check_arity("tan", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.tan())
+            }
+            "ceil" => {
+                check_arity("ceil", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.ceil())
+            }
+            "floor" => {
+                check_arity("floor", &args, 1)?;
+                Ok(self.parse_expression(df, &args[0])?.floor())
+            }
+            "round" => {
+                check_arity("round", &args, 1)?;
+                // round(x) rounds to 0 decimal places (nearest integer).
+                Ok(self
+                    .parse_expression(df, &args[0])?
+                    .round(0, RoundMode::HalfAwayFromZero))
+            }
+
+            // ── Binary functions ─────────────────────────────────────────────
+            "pow" => {
+                check_arity("pow", &args, 2)?;
+                let base = self.parse_expression(df, &args[0])?;
+                let exp = self.parse_expression(df, &args[1])?;
+                Ok(base.pow(exp))
+            }
+            "min" => {
+                // Element-wise minimum of two expressions.
+                check_arity("min", &args, 2)?;
+                let a = self.parse_expression(df, &args[0])?;
+                let b = self.parse_expression(df, &args[1])?;
+                min_horizontal([a, b]).map_err(PostProcessError::PolarsError)
+            }
+            "max" => {
+                // Element-wise maximum of two expressions.
+                check_arity("max", &args, 2)?;
+                let a = self.parse_expression(df, &args[0])?;
+                let b = self.parse_expression(df, &args[1])?;
+                max_horizontal([a, b]).map_err(PostProcessError::PolarsError)
+            }
+            "log" => {
+                // log(value, base) — change-of-base via Polars .log(base: Expr).
+                check_arity("log", &args, 2)?;
+                let value = self.parse_expression(df, &args[0])?;
+                let base = self.parse_expression(df, &args[1])?;
+                Ok(value.log(base))
+            }
+
+            _ => Err(PostProcessError::ProcessingError(format!(
+                "Unknown function: {}",
+                name
+            ))),
         }
+    }
+
+    /// Split comma-separated args respecting parenthesis nesting, so that
+    /// `f(a, g(b, c))` splits into `["a", "g(b, c)"]`.
+    fn split_function_args(args_str: &str) -> Vec<String> {
+        let mut args = Vec::new();
+        let mut depth: i32 = 0;
+        let mut current = String::new();
+
+        for c in args_str.chars() {
+            match c {
+                '(' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                ')' => {
+                    depth -= 1;
+                    current.push(c);
+                }
+                ',' if depth == 0 => {
+                    args.push(current.trim().to_string());
+                    current.clear();
+                }
+                _ => current.push(c),
+            }
+        }
+
+        let tail = current.trim().to_string();
+        if !tail.is_empty() {
+            args.push(tail);
+        }
+
+        args
     }
 
     fn parse_operand_with_validation(
@@ -1008,5 +1252,18 @@ impl FormulaApplier {
                 column_names.join(", ")
             )))
         }
+    }
+}
+
+fn check_arity(name: &str, args: &[String], expected: usize) -> PostProcessResult<()> {
+    if args.len() == expected {
+        Ok(())
+    } else {
+        Err(PostProcessError::ProcessingError(format!(
+            "Function '{}' expects {} argument(s), got {}",
+            name,
+            expected,
+            args.len()
+        )))
     }
 }

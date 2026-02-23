@@ -376,6 +376,183 @@ pub(crate) fn extract_data_to_dataframe(
     extract_data_with_dimension_manager(file, var, var_name, &dim_manager)
 }
 
+/// Extracts multiple variables from the same NetCDF file into a single DataFrame.
+///
+/// Dimension columns are shared across all variables. Each variable produces one
+/// additional value column. All variables must have identical dimensions (same
+/// names and sizes as the first variable); a mismatch returns an error.
+///
+/// The `DimensionIndexManager` (filters applied once against the first variable)
+/// is reused for every subsequent variable, so filters are applied exactly once
+/// and the same row set is produced for all variables.
+pub(crate) fn extract_multi_variable_dataframe(
+    file: &netcdf::File,
+    var_names: &[String],
+    filters: &[Box<dyn NCFilter>],
+) -> Result<DataFrame, Nc2ParquetError> {
+    debug_assert!(!var_names.is_empty(), "var_names must be non-empty");
+
+    let first_name = &var_names[0];
+
+    // Build dim_manager from the first variable and apply filters once.
+    // The variable borrow is scoped to end before the loop below.
+    let dim_manager = {
+        let first_var = file
+            .variable(first_name)
+            .ok_or_else(|| Nc2ParquetError::VariableNotFound(first_name.clone()))?;
+        let mut dm = DimensionIndexManager::new(&first_var)?;
+        for filter in filters.iter() {
+            let result = filter.apply(file)?;
+            dm.apply_filter_result(&result)?;
+        }
+        dm
+    };
+
+    let first_dims: Vec<(String, usize)> = {
+        let first_var = file
+            .variable(first_name)
+            .ok_or_else(|| Nc2ParquetError::VariableNotFound(first_name.clone()))?;
+        first_var
+            .dimensions()
+            .iter()
+            .map(|d| (d.name().to_string(), d.len()))
+            .collect()
+    };
+
+    let mut df = {
+        let first_var = file
+            .variable(first_name)
+            .ok_or_else(|| Nc2ParquetError::VariableNotFound(first_name.clone()))?;
+        extract_data_with_dimension_manager(file, &first_var, first_name, &dim_manager)?
+    };
+
+    for name in var_names.iter().skip(1) {
+        let var_dims: Vec<(String, usize)> = {
+            let var = file
+                .variable(name)
+                .ok_or_else(|| Nc2ParquetError::VariableNotFound(name.clone()))?;
+            var.dimensions()
+                .iter()
+                .map(|d| (d.name().to_string(), d.len()))
+                .collect()
+        };
+
+        if var_dims != first_dims {
+            return Err(Nc2ParquetError::Extraction(format!(
+                "Variable '{}' has dimensions {:?} but expected {:?} (matching first variable '{}')",
+                name, var_dims, first_dims, first_name
+            )));
+        }
+
+        let values: Vec<f32> = {
+            let var = file
+                .variable(name)
+                .ok_or_else(|| Nc2ParquetError::VariableNotFound(name.clone()))?;
+            extract_variable_values_with_dim_manager(&var, &dim_manager)?
+        };
+
+        df.with_column(Series::new(name.as_str().into(), values))?;
+    }
+
+    Ok(df)
+}
+
+/// Extracts variable values (without dimension columns) using a pre-built
+/// `DimensionIndexManager`. Used by `extract_multi_variable_dataframe` to
+/// obtain additional variable columns without rebuilding the dim_manager.
+fn extract_variable_values_with_dim_manager(
+    var: &netcdf::Variable,
+    dim_manager: &DimensionIndexManager,
+) -> Result<Vec<f32>, Nc2ParquetError> {
+    if dim_manager.is_cartesian_product() {
+        extract_variable_values_batch(var, dim_manager)
+    } else {
+        extract_variable_values_cellwise(var, dim_manager)
+    }
+}
+
+/// Values-only extraction for the Cartesian-product (batch slab-read) path.
+fn extract_variable_values_batch(
+    var: &netcdf::Variable,
+    dim_manager: &DimensionIndexManager,
+) -> Result<Vec<f32>, Nc2ParquetError> {
+    let dim_indices = dim_manager.sorted_dimension_indices();
+
+    if dim_indices.iter().any(|(_, idxs)| idxs.is_empty()) {
+        return Ok(Vec::new());
+    }
+
+    let ndims = dim_indices.len();
+    let mut starts = Vec::with_capacity(ndims);
+    let mut counts = Vec::with_capacity(ndims);
+    let mut local_offsets: Vec<Vec<usize>> = Vec::with_capacity(ndims);
+
+    for (_, idxs) in &dim_indices {
+        let first = idxs[0];
+        let last = *idxs.last().expect("non-empty checked above");
+        starts.push(first);
+        counts.push(last - first + 1);
+        let offsets: Vec<usize> = idxs.iter().map(|&g| g - first).collect();
+        local_offsets.push(offsets);
+    }
+
+    let extents = netcdf::Extents::try_from((starts.as_slice(), counts.as_slice()))
+        .map_err(Nc2ParquetError::NetCdf)?;
+    let slab: Vec<f32> = var.get_values::<f32, _>(extents)?;
+
+    let mut strides = vec![1usize; ndims];
+    for i in (0..ndims.saturating_sub(1)).rev() {
+        strides[i] = strides[i + 1] * counts[i + 1];
+    }
+
+    let total_rows: usize = local_offsets.iter().map(|v| v.len()).product();
+    let mut values: Vec<f32> = Vec::with_capacity(total_rows);
+
+    let mut pos = vec![0usize; ndims];
+
+    'outer: loop {
+        let flat: usize = pos
+            .iter()
+            .enumerate()
+            .map(|(d, &p)| local_offsets[d][p] * strides[d])
+            .sum();
+        values.push(slab[flat]);
+
+        let mut carry = true;
+        for d in (0..ndims).rev() {
+            if carry {
+                pos[d] += 1;
+                if pos[d] < local_offsets[d].len() {
+                    carry = false;
+                } else {
+                    pos[d] = 0;
+                }
+            }
+        }
+        if carry {
+            break 'outer;
+        }
+    }
+
+    Ok(values)
+}
+
+/// Values-only extraction for the cellwise (explicit Pairs/Triplets) path.
+fn extract_variable_values_cellwise(
+    var: &netcdf::Variable,
+    dim_manager: &DimensionIndexManager,
+) -> Result<Vec<f32>, Nc2ParquetError> {
+    let combinations = dim_manager.get_all_coordinate_combinations();
+    let mut values: Vec<f32> = Vec::with_capacity(combinations.len());
+
+    for combination in &combinations {
+        let value = extract_variable_value(var, combination)?;
+        values.push(value);
+    }
+
+    Ok(values)
+}
+
 fn extract_data_with_dimension_manager(
     file: &netcdf::File,
     var: &netcdf::Variable,
@@ -474,7 +651,6 @@ fn extract_data_batch(
     let mut local_offsets: Vec<Vec<usize>> = Vec::with_capacity(ndims);
 
     for (_, idxs) in &dim_indices {
-        // idxs is already sorted (guaranteed by sorted_dimension_indices).
         let first = idxs[0];
         let last = *idxs.last().expect("non-empty checked above");
         starts.push(first);

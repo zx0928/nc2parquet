@@ -11,7 +11,7 @@ mod cli_tests {
 
     #[test]
     fn test_cli_help() {
-        let result = Cli::try_parse_from(&["nc2parquet", "--help"]);
+        let result = Cli::try_parse_from(["nc2parquet", "--help"]);
         assert!(result.is_err()); // --help causes early exit
 
         let error = result.unwrap_err();
@@ -24,13 +24,13 @@ mod cli_tests {
 
     #[test]
     fn test_cli_version() {
-        let result = Cli::try_parse_from(&["nc2parquet", "--version"]);
+        let result = Cli::try_parse_from(["nc2parquet", "--version"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_cli_global_flags() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "--verbose",
             "--output-format",
@@ -48,7 +48,7 @@ mod cli_tests {
 
     #[test]
     fn test_convert_command_basic() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -74,7 +74,7 @@ mod cli_tests {
 
     #[test]
     fn test_convert_command_with_filters() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -125,7 +125,7 @@ mod cli_tests {
 
     #[test]
     fn test_info_command() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "info",
             "test.nc",
@@ -154,7 +154,7 @@ mod cli_tests {
 
     #[test]
     fn test_validate_command() {
-        let cli = Cli::parse_from(&["nc2parquet", "validate", "config.json", "--detailed"]);
+        let cli = Cli::parse_from(["nc2parquet", "validate", "config.json", "--detailed"]);
 
         if let Commands::Validate {
             config_file,
@@ -170,7 +170,7 @@ mod cli_tests {
 
     #[test]
     fn test_template_command() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "template",
             "multi-filter",
@@ -196,7 +196,7 @@ mod cli_tests {
 
     #[test]
     fn test_range_filter_parsing() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -216,7 +216,7 @@ mod cli_tests {
 
     #[test]
     fn test_list_filter_parsing() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -235,7 +235,7 @@ mod cli_tests {
 
     #[test]
     fn test_invalid_range_filter() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -245,7 +245,7 @@ mod cli_tests {
         ]);
         assert!(result.is_err());
 
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -255,7 +255,7 @@ mod cli_tests {
         ]);
         assert!(result.is_err());
 
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -268,7 +268,7 @@ mod cli_tests {
 
     #[test]
     fn test_invalid_list_filter() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -278,7 +278,7 @@ mod cli_tests {
         ]);
         assert!(result.is_err());
 
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "nc2parquet",
             "convert",
             "input.nc",
@@ -298,7 +298,7 @@ mod cli_tests {
             std::env::set_var("NC2PARQUET_VARIABLE", "env_temperature");
         }
 
-        let _cli = Cli::parse_from(&["nc2parquet", "convert", "input.nc", "output.parquet"]);
+        let _cli = Cli::parse_from(["nc2parquet", "convert", "input.nc", "output.parquet"]);
 
         unsafe {
             std::env::remove_var("NC2PARQUET_CONFIG");
@@ -312,13 +312,13 @@ mod cli_tests {
 
         for format in &formats {
             let cli =
-                Cli::parse_from(&["nc2parquet", "--output-format", format, "template", "basic"]);
+                Cli::parse_from(["nc2parquet", "--output-format", format, "template", "basic"]);
 
-            match format {
-                &"human" => assert_eq!(cli.output_format, OutputFormat::Human),
-                &"json" => assert_eq!(cli.output_format, OutputFormat::Json),
-                &"yaml" => assert_eq!(cli.output_format, OutputFormat::Yaml),
-                &"csv" => assert_eq!(cli.output_format, OutputFormat::Csv),
+            match *format {
+                "human" => assert_eq!(cli.output_format, OutputFormat::Human),
+                "json" => assert_eq!(cli.output_format, OutputFormat::Json),
+                "yaml" => assert_eq!(cli.output_format, OutputFormat::Yaml),
+                "csv" => assert_eq!(cli.output_format, OutputFormat::Csv),
                 _ => unreachable!(),
             }
         }
@@ -329,15 +329,15 @@ mod cli_tests {
         let templates = ["basic", "s3", "multi-filter", "weather", "ocean"];
 
         for template in &templates {
-            let cli = Cli::parse_from(&["nc2parquet", "template", template]);
+            let cli = Cli::parse_from(["nc2parquet", "template", template]);
 
             if let Commands::Template { template_type, .. } = &cli.command {
-                match template {
-                    &"basic" => assert_eq!(template_type, &TemplateType::Basic),
-                    &"s3" => assert_eq!(template_type, &TemplateType::S3),
-                    &"multi-filter" => assert_eq!(template_type, &TemplateType::MultiFilter),
-                    &"weather" => assert_eq!(template_type, &TemplateType::Weather),
-                    &"ocean" => assert_eq!(template_type, &TemplateType::Ocean),
+                match *template {
+                    "basic" => assert_eq!(template_type, &TemplateType::Basic),
+                    "s3" => assert_eq!(template_type, &TemplateType::S3),
+                    "multi-filter" => assert_eq!(template_type, &TemplateType::MultiFilter),
+                    "weather" => assert_eq!(template_type, &TemplateType::Weather),
+                    "ocean" => assert_eq!(template_type, &TemplateType::Ocean),
                     _ => unreachable!(),
                 }
             } else {
@@ -348,30 +348,29 @@ mod cli_tests {
 
     #[test]
     fn test_quiet_mode() {
-        let cli = Cli::parse_from(&["nc2parquet", "--quiet", "info", "test.nc"]);
+        let cli = Cli::parse_from(["nc2parquet", "--quiet", "info", "test.nc"]);
 
         assert!(cli.quiet);
     }
 
     #[test]
     fn test_verbose_quiet_conflict() {
-        let result =
-            Cli::try_parse_from(&["nc2parquet", "--verbose", "--quiet", "info", "test.nc"]);
+        let result = Cli::try_parse_from(["nc2parquet", "--verbose", "--quiet", "info", "test.nc"]);
 
         assert!(result.is_err());
 
-        let cli_verbose = Cli::parse_from(&["nc2parquet", "--verbose", "info", "test.nc"]);
+        let cli_verbose = Cli::parse_from(["nc2parquet", "--verbose", "info", "test.nc"]);
         assert!(cli_verbose.verbose);
         assert!(!cli_verbose.quiet);
 
-        let cli_quiet = Cli::parse_from(&["nc2parquet", "--quiet", "info", "test.nc"]);
+        let cli_quiet = Cli::parse_from(["nc2parquet", "--quiet", "info", "test.nc"]);
         assert!(!cli_quiet.verbose);
         assert!(cli_quiet.quiet);
     }
 
     #[test]
     fn test_command_overrides() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "nc2parquet",
             "convert",
             "input.nc",

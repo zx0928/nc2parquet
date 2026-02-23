@@ -924,7 +924,7 @@ mod aggregator_edge_cases {
             let col_name = format!("values_{}", label);
             let col = result
                 .column(&col_name)
-                .expect(&format!("column {} missing", col_name));
+                .unwrap_or_else(|_| panic!("column {} missing", col_name));
             let val = col.f64().unwrap().get(0).unwrap();
             assert!(
                 (val - expected).abs() < 1e-6,

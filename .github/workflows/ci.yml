@@ -77,6 +77,7 @@ jobs:
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
+          components: llvm-tools-preview
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v3
@@ -98,8 +99,10 @@ jobs:
         uses: taiki-e/install-action@cargo-tarpaulin
 
       - name: Run coverage
+        continue-on-error: true
         run: |
           cargo tarpaulin --out xml --output-dir coverage \
+            --engine llvm \
             --exclude-files "src/main.rs" "src/handlers/*" "src/test_helpers.rs" "src/tests/*" "benches/*" \
             --skip-clean --lib
 

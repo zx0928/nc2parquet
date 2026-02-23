@@ -3,6 +3,7 @@
 > High-performance NetCDF to Parquet converter with advanced filtering, cloud storage, and post-processing.
 
 [![CI](https://github.com/rjmalves/nc2parquet/actions/workflows/ci.yml/badge.svg)](https://github.com/rjmalves/nc2parquet/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/rjmalves/nc2parquet/branch/main/graph/badge.svg)](https://codecov.io/gh/rjmalves/nc2parquet)
 [![Crates.io](https://img.shields.io/crates/v/nc2parquet.svg)](https://crates.io/crates/nc2parquet)
 [![docs.rs](https://img.shields.io/docsrs/nc2parquet)](https://docs.rs/nc2parquet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

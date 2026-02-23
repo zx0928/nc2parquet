@@ -410,16 +410,22 @@ a body paragraph when the motivation is not obvious from the subject alone.
 ### CI Pipeline
 
 The CI pipeline runs on every push to `main` and `develop` and on every PR
-targeting `main`. It runs on **stable** and **beta** Rust:
+targeting `main`. It runs on a 3-entry matrix: **Ubuntu (stable + beta)** and
+**macOS (stable)**:
 
-| Job            | Command                                                    |
-| -------------- | ---------------------------------------------------------- |
-| Format check   | `cargo fmt --all -- --check`                               |
-| Clippy         | `cargo clippy --all-targets --all-features -- -D warnings` |
-| Unit tests     | `cargo test --lib --verbose`                               |
-| Security audit | `cargo audit`                                              |
+| Job                  | Command                                                    |
+| -------------------- | ---------------------------------------------------------- |
+| Format check         | `cargo fmt --all -- --check`                               |
+| Clippy               | `cargo clippy --all-targets --all-features -- -D warnings` |
+| Library tests        | `cargo test --lib --verbose`                               |
+| Doc-tests            | `cargo test --doc --verbose`                               |
+| Coverage             | `cargo tarpaulin --out xml --lib` (uploads to Codecov)     |
+| Security audit       | `cargo audit`                                              |
+| Benchmark regression | `cargo bench` (separate workflow, path-filtered)           |
 
-A PR must be green on both Rust channels before it will be reviewed.
+A PR must be green on all three matrix entries before it will be reviewed.
+
+Binary releases are built via `cargo-dist` for Linux (x86_64, aarch64) and macOS (x86_64, aarch64) and published to GitHub Releases on each version tag.
 
 ---
 

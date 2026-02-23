@@ -5,7 +5,7 @@ use polars::prelude::*;
 use std::io::Cursor;
 
 pub(crate) fn write_dataframe_to_parquet(
-    df: &DataFrame,
+    df: &mut DataFrame,
     output_path: &str,
 ) -> Result<(), Nc2ParquetError> {
     debug!("Writing DataFrame to parquet file: {}\n", output_path);
@@ -19,16 +19,15 @@ pub(crate) fn write_dataframe_to_parquet(
 
     let file = std::fs::File::create(output_path)?;
     let writer = ParquetWriter::new(file);
-    let mut df_clone = df.clone();
 
-    writer.finish(&mut df_clone)?;
+    writer.finish(df)?;
     debug!("Successfully wrote parquet file: {}", output_path);
 
     Ok(())
 }
 
 pub(crate) async fn write_dataframe_to_parquet_async(
-    df: &DataFrame,
+    df: &mut DataFrame,
     output_path: &str,
 ) -> Result<(), Nc2ParquetError> {
     debug!("Writing DataFrame to parquet file: {}\n", output_path);
@@ -44,12 +43,11 @@ pub(crate) async fn write_dataframe_to_parquet_async(
     Ok(())
 }
 
-fn dataframe_to_parquet_bytes(df: &DataFrame) -> Result<Vec<u8>, Nc2ParquetError> {
+fn dataframe_to_parquet_bytes(df: &mut DataFrame) -> Result<Vec<u8>, Nc2ParquetError> {
     let mut buffer = Vec::new();
     let cursor = Cursor::new(&mut buffer);
     let writer = ParquetWriter::new(cursor);
-    let mut df_clone = df.clone();
 
-    writer.finish(&mut df_clone)?;
+    writer.finish(df)?;
     Ok(buffer)
 }

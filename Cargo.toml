@@ -11,11 +11,15 @@ repository = "https://github.com/rjmalves/nc2parquet"
 keywords = ["netcdf", "parquet", "climate", "data", "conversion"]
 categories = ["command-line-utilities", "science", "data-structures"]
 
+[features]
+dhat-heap = ["dep:dhat"]
+
 [[bin]]
 name = "nc2parquet"
 path = "src/main.rs"
 
 [dependencies]
+dhat = { version = "0.3", optional = true }
 aws-config = "1.8.6"
 aws-sdk-s3 = "1.106.0"
 netcdf = { version = "0.11.0", features = ["static"] }
@@ -44,6 +48,23 @@ aws-credential-types = "1.2"
 proptest = "1.4"
 assert_cmd = "2.0"
 predicates = "3.1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "extraction_bench"
+harness = false
+
+[[bench]]
+name = "filter_bench"
+harness = false
+
+[[bench]]
+name = "postprocess_bench"
+harness = false
+
+[[bench]]
+name = "combination_bench"
+harness = false
 
 # The profile that 'dist' will build with
 [profile.dist]

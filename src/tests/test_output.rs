@@ -8,12 +8,12 @@ mod output_tests {
 
     #[test]
     fn test_write_simple_dataframe_produces_valid_parquet() {
-        let df = create_simple_test_dataframe();
+        let mut df = create_simple_test_dataframe();
         let dir = create_temp_output_dir();
         let output_path = dir.path().join("output.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
-        write_dataframe_to_parquet(&df, output_path_str)
+        write_dataframe_to_parquet(&mut df, output_path_str)
             .expect("write_dataframe_to_parquet must succeed");
 
         assert_parquet_file_valid(&output_path);
@@ -21,7 +21,7 @@ mod output_tests {
 
     #[test]
     fn test_write_empty_dataframe_succeeds() {
-        let df = df! {
+        let mut df = df! {
             "value" => Vec::<f64>::new(),
         }
         .expect("creating empty DataFrame must succeed");
@@ -30,7 +30,7 @@ mod output_tests {
         let output_path = dir.path().join("empty.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
-        write_dataframe_to_parquet(&df, output_path_str)
+        write_dataframe_to_parquet(&mut df, output_path_str)
             .expect("write_dataframe_to_parquet must succeed for empty DataFrame");
 
         assert!(
@@ -56,7 +56,7 @@ mod output_tests {
 
     #[test]
     fn test_write_creates_nonexistent_parent_directories() {
-        let df = create_simple_test_dataframe();
+        let mut df = create_simple_test_dataframe();
         let dir = create_temp_output_dir();
         let output_path = dir
             .path()
@@ -66,7 +66,7 @@ mod output_tests {
             .join("out.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
-        write_dataframe_to_parquet(&df, output_path_str)
+        write_dataframe_to_parquet(&mut df, output_path_str)
             .expect("write_dataframe_to_parquet must create parent directories and succeed");
 
         assert_parquet_file_valid(&output_path);
@@ -74,12 +74,12 @@ mod output_tests {
 
     #[tokio::test]
     async fn test_async_write_to_local_path_produces_valid_parquet() {
-        let df = create_simple_test_dataframe();
+        let mut df = create_simple_test_dataframe();
         let dir = create_temp_output_dir();
         let output_path = dir.path().join("async_output.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
-        write_dataframe_to_parquet_async(&df, output_path_str)
+        write_dataframe_to_parquet_async(&mut df, output_path_str)
             .await
             .expect("write_dataframe_to_parquet_async must succeed");
 
@@ -88,12 +88,12 @@ mod output_tests {
 
     #[test]
     fn test_written_parquet_file_starts_with_par1_magic_bytes() {
-        let df = create_simple_test_dataframe();
+        let mut df = create_simple_test_dataframe();
         let dir = create_temp_output_dir();
         let output_path = dir.path().join("magic_check.parquet");
         let output_path_str = output_path.to_str().expect("path must be valid UTF-8");
 
-        write_dataframe_to_parquet(&df, output_path_str)
+        write_dataframe_to_parquet(&mut df, output_path_str)
             .expect("write_dataframe_to_parquet must succeed");
 
         let raw_bytes =

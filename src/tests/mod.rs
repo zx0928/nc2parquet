@@ -7,3 +7,6 @@ mod test_integration;
 mod test_output;
 mod test_postprocess;
 mod test_properties;
+
+#[cfg(feature = "dhat-heap")]
+mod test_memory_profile;

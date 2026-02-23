@@ -21,7 +21,7 @@ This plan uses **progressive planning**. Epics 1-2 have fully detailed tickets r
 | ------- | --------------------------------- | ------- | ------------ | --------- |
 | epic-01 | Testing Infrastructure & Coverage | 8       | Detailed     | 2-3 weeks |
 | epic-02 | Code Quality & Refactoring        | 5       | Detailed     | 2-3 weeks |
-| epic-03 | Performance Optimization          | 5       | Outline      | 2-3 weeks |
+| epic-03 | Performance Optimization          | 5       | Refined      | 2-3 weeks |
 | epic-04 | Feature Completeness              | 5       | Outline      | 2-3 weeks |
 | epic-05 | Documentation & Community         | 5       | Outline      | 1-2 weeks |
 | epic-06 | CI/CD & Release Quality           | 5       | Outline      | 1-2 weeks |
@@ -43,11 +43,11 @@ This plan uses **progressive planning**. Epics 1-2 have fully detailed tickets r
 | ticket-011 | Audit and Tighten Visibility Modifiers                 | epic-02 | completed | Detailed     |
 | ticket-012 | Add Exhaustive Rustdoc with Examples                   | epic-02 | completed | Detailed     |
 | ticket-013 | Remove Dead Code and Fix Remaining Clippy Warnings     | epic-02 | completed | Detailed     |
-| ticket-014 | Add Criterion Benchmark Suite                          | epic-03 | pending   | Outline      |
-| ticket-015 | Implement Chunked NetCDF Reading                       | epic-03 | pending   | Outline      |
-| ticket-016 | Reduce Allocation Overhead in Extraction Pipeline      | epic-03 | pending   | Outline      |
-| ticket-017 | Parallelize Independent PostProcessor Executions       | epic-03 | pending   | Outline      |
-| ticket-018 | Profile and Optimize Peak Memory Usage                 | epic-03 | pending   | Outline      |
+| ticket-014 | Add Criterion Benchmark Suite                          | epic-03 | completed | Refined      |
+| ticket-015 | Implement Chunked NetCDF Reading                       | epic-03 | completed | Refined      |
+| ticket-016 | Reduce Allocation Overhead in Extraction Pipeline      | epic-03 | completed | Refined      |
+| ticket-017 | Parallelize Independent PostProcessor Executions       | epic-03 | completed | Refined      |
+| ticket-018 | Profile and Optimize Peak Memory Usage                 | epic-03 | completed | Refined      |
 | ticket-019 | Extend UnitConverter with Meteorological Unit Families | epic-04 | pending   | Outline      |
 | ticket-020 | Add Glob Pattern Support for Batch File Processing     | epic-04 | pending   | Outline      |
 | ticket-021 | Support Multi-Variable Extraction in Single Pass       | epic-04 | pending   | Outline      |

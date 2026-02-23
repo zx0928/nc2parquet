@@ -1,0 +1,173 @@
+{
+  "plan": "nc2parquet-quality-upgrade",
+  "last_updated": "2026-02-23T15:55:00Z",
+  "progressive": true,
+  "tickets": {
+    "ticket-001-add-test-dependencies-and-helpers.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-002-reorganize-tests-into-modules.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-003-unit-tests-filters-edge-cases.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-004-unit-tests-extract-edge-cases.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-005-unit-tests-postprocess-edge-cases.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-006-unit-tests-output-storage.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-007-property-based-tests.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-008-integration-tests-error-paths.md": {
+      "status": "completed",
+      "detail_level": "detailed",
+      "agent": "hpc-rust-developer"
+    },
+    "ticket-009-extract-handlers-from-main.md": {
+      "status": "pending",
+      "detail_level": "detailed"
+    },
+    "ticket-010-improve-error-types.md": {
+      "status": "pending",
+      "detail_level": "detailed"
+    },
+    "ticket-011-audit-visibility-modifiers.md": {
+      "status": "pending",
+      "detail_level": "detailed"
+    },
+    "ticket-012-add-exhaustive-rustdoc.md": {
+      "status": "pending",
+      "detail_level": "detailed"
+    },
+    "ticket-013-remove-dead-code-fix-clippy.md": {
+      "status": "pending",
+      "detail_level": "detailed"
+    },
+    "ticket-014-add-criterion-benchmark-suite.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-015-implement-chunked-netcdf-reading.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-016-reduce-allocation-overhead-extraction.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-017-parallelize-postprocessor-executions.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-018-profile-optimize-peak-memory.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-019-extend-unit-converter-meteorological.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-020-add-glob-pattern-batch-processing.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-021-multi-variable-extraction.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-022-parquet-output-configuration.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-023-extend-formula-parser-functions.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-024-rewrite-readme-professional.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-025-create-changelog.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-026-create-contributing-guide.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-027-write-architecture-decision-records.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-028-create-usage-tutorials.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-029-add-codecov-coverage-reporting.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-030-add-benchmark-regression-ci.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-031-automate-release-cargo-dist.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-032-add-cross-compilation-ci-matrix.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    },
+    "ticket-033-add-integration-test-ci-job.md": {
+      "status": "pending",
+      "detail_level": "outline"
+    }
+  },
+  "epics": {
+    "epic-01-testing": {
+      "phase": "completed",
+      "learning_extracted": true
+    },
+    "epic-02-code-quality": {
+      "phase": "executing",
+      "learning_extracted": false
+    },
+    "epic-03-performance": {
+      "phase": "outline",
+      "learning_extracted": false
+    },
+    "epic-04-features": {
+      "phase": "outline",
+      "learning_extracted": false
+    },
+    "epic-05-documentation": {
+      "phase": "outline",
+      "learning_extracted": false
+    },
+    "epic-06-cicd": {
+      "phase": "outline",
+      "learning_extracted": false
+    }
+  }
+}

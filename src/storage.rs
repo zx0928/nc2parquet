@@ -505,6 +505,97 @@ mod tests {
 
         Ok(())
     }
+
+    /// LocalStorage.write must create all intermediate directories when they do not exist.
+    #[tokio::test]
+    async fn test_local_storage_creates_nested_dirs() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = LocalStorage;
+        let temp_dir = TempDir::new()?;
+        // Build a path with three non-existent subdirectory levels
+        let nested_path = temp_dir
+            .path()
+            .join("a")
+            .join("b")
+            .join("c")
+            .join("data.bin");
+        let nested_path_str = nested_path.to_str().unwrap();
+
+        let test_data = b"nested directory content";
+        storage.write(nested_path_str, test_data).await?;
+
+        // Verify the file was created with the correct content
+        let read_data = storage.read(nested_path_str).await?;
+        assert_eq!(read_data, test_data);
+        assert!(storage.exists(nested_path_str).await?);
+
+        Ok(())
+    }
+
+    /// parse_s3_path must correctly split a deeply nested S3 key.
+    #[test]
+    fn test_parse_s3_path_deeply_nested() {
+        let path = "s3://bucket/deep/nested/path/file.nc";
+        let (bucket, key) = S3Storage::parse_s3_path(path).unwrap();
+        assert_eq!(bucket, "bucket");
+        assert_eq!(key, "deep/nested/path/file.nc");
+    }
+
+    /// parse_s3_path must return an error when the path contains a bucket but no key
+    /// (i.e. "s3://bucket/" or "s3://bucket").
+    #[test]
+    fn test_parse_s3_path_bucket_only_no_key() {
+        // Trailing slash makes the key component empty — must be rejected
+        assert!(
+            S3Storage::parse_s3_path("s3://bucket/").is_err(),
+            "s3://bucket/ must be rejected because the key is empty"
+        );
+        // No slash at all means splitn yields only one component — must be rejected
+        assert!(
+            S3Storage::parse_s3_path("s3://bucket").is_err(),
+            "s3://bucket must be rejected because no key is present"
+        );
+    }
+
+    /// StorageFactory::is_s3_path and is_local_path must handle edge cases correctly.
+    #[test]
+    fn test_is_s3_path_edge_cases() {
+        // Bare scheme with no authority — starts with "s3://" so treated as S3
+        assert!(
+            StorageFactory::is_s3_path("s3://"),
+            "s3:// starts with 's3://' and must be reported as an S3 path"
+        );
+
+        // Uppercase S3 scheme — Rust's starts_with is case-sensitive; must NOT match
+        assert!(
+            !StorageFactory::is_s3_path("S3://bucket/key"),
+            "S3://bucket/key uses uppercase and must not be treated as an S3 path"
+        );
+
+        // Different scheme must not match
+        assert!(
+            !StorageFactory::is_s3_path("http://bucket/key"),
+            "http:// must not be treated as an S3 path"
+        );
+
+        // Empty string must not match
+        assert!(
+            !StorageFactory::is_s3_path(""),
+            "empty string must not be treated as an S3 path"
+        );
+
+        // Valid S3 path without a key still starts with "s3://"
+        assert!(
+            StorageFactory::is_s3_path("s3://bucket"),
+            "s3://bucket must be detected as an S3 path by is_s3_path"
+        );
+
+        // is_local_path must be the complement of is_s3_path for every case above
+        assert!(!StorageFactory::is_local_path("s3://"));
+        assert!(StorageFactory::is_local_path("S3://bucket/key"));
+        assert!(StorageFactory::is_local_path("http://bucket/key"));
+        assert!(StorageFactory::is_local_path(""));
+        assert!(!StorageFactory::is_local_path("s3://bucket"));
+    }
 }
 
 #[cfg(test)]

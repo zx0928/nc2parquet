@@ -22,6 +22,9 @@ pub mod storage;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub mod test_helpers;
+
 use crate::extract::extract_data_to_dataframe;
 use crate::input::JobConfig;
 use crate::output::{write_dataframe_to_parquet, write_dataframe_to_parquet_async};

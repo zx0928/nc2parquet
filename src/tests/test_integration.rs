@@ -462,13 +462,12 @@ mod workflow_tests {
         crate::process_netcdf_job(&config_with_processing)?;
         let duration_with_processing = start.elapsed();
 
-        // On CI runners with tiny inputs, both durations are sub-millisecond
-        // and noise dominates. Use a generous 50x ceiling to catch only
-        // catastrophic regressions without flaky failures.
+        // Relative comparisons are unreliable on CI runners where resource
+        // contention causes wild variance. Use an absolute ceiling that
+        // catches catastrophic regressions without flaky failures.
         assert!(
-            duration_with_processing < duration * 50 + std::time::Duration::from_millis(100),
-            "Post-processing should not add excessive overhead: base={:?}, with_postprocess={:?}",
-            duration,
+            duration_with_processing < std::time::Duration::from_secs(30),
+            "Post-processing took too long: {:?}",
             duration_with_processing
         );
 

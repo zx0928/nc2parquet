@@ -413,7 +413,7 @@ mod workflow_tests {
         let temp_dir = tempdir()?;
         let output_path = temp_dir.path().join("performance_test.parquet");
 
-        let start = Instant::now();
+        // Run base conversion first to warm up caches
         let config = JobConfig {
             nc_key: get_test_data_path("simple_xy.nc")
                 .to_string_lossy()
@@ -425,9 +425,7 @@ mod workflow_tests {
             postprocessing: None,
             output: None,
         };
-
         crate::process_netcdf_job(&config)?;
-        let duration = start.elapsed();
 
         let output_path2 = temp_dir.path().join("performance_postprocess.parquet");
         let start = Instant::now();

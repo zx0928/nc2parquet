@@ -1,9 +1,9 @@
 [package]
 name = "nc2parquet"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 description = "High-performance NetCDF to Parquet converter with cloud storage support"
-authors = ["Rogerio Malves <rjmalves@users.noreply.github.com>"]
+authors = ["Rogerio Alves <rjmalves@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/rjmalves/nc2parquet"

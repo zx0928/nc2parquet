@@ -11,6 +11,7 @@
 ## Features
 
 - **Multi-variable extraction** — extract one or many variables per pass into a single Parquet file
+- **Cross-dimension variable merge** — merge variables with different dimensions (`-M`), broadcasting lower-dimensional variables to match the highest one
 - **Batch processing** — convert entire directory trees with a single glob pattern
 - **Four filter types** — range, list, 2D spatial point, and 3D spatiotemporal point with intersection logic
 - **Post-processing pipeline** — rename columns, convert units, apply mathematical formulas, and parse datetime values
@@ -50,6 +51,10 @@ nc2parquet convert examples/data/simple_xy.nc output.parquet -n data
 # Extract multiple variables into one file
 nc2parquet convert examples/data/pres_temp_4D.nc output.parquet \
   -N temperature,pressure
+
+# Merge variables with different dimensions (e.g. 1D lat/lon + 2D zeta)
+# lower-dimensional variables are broadcast to match the highest
+nc2parquet convert input.nc merged.parquet -M lat,lon,zeta
 
 # Batch convert all .nc files under a directory
 nc2parquet convert "data/**/*.nc" output/ --glob "data/**/*.nc" -n temperature
@@ -126,6 +131,7 @@ Key `convert` flags:
 | --------------------------------- | ---------------------------- | --------------------------------------------------------- |
 | `-n / --variable <NAME>`          | `NC2PARQUET_VARIABLE`        | Single variable name to extract                           |
 | `-N / --variables <A,B,...>`      |                              | Comma-separated list of variables (multi-column output)   |
+| `-M / --merge-variables <A,B,...>`|                              | Merge variables with different dimensions (broadcast)     |
 | `--glob <PATTERN>`                |                              | Glob pattern for batch processing                         |
 | `--range <DIM:MIN:MAX>`           | `NC2PARQUET_RANGE_FILTERS`   | Range filter (repeatable)                                 |
 | `--list <DIM:V1,V2,...>`          | `NC2PARQUET_LIST_FILTERS`    | List filter (repeatable)                                  |

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod input_tests {
-    use crate::input::{FilterConfig, JobConfig};
+    use crate::input::{FilterConfig, JobConfig, OutputTarget};
 
     #[test]
     fn test_job_config_from_json() {
@@ -8,7 +8,7 @@ mod input_tests {
         {
             "nc_key": "examples/data/simple_xy.nc",
             "variable_name": "data",
-            "parquet_key": "test.parquet",
+            "output": {"type": "parquet", "parquet_key": "test.parquet"},
             "filters": [
                 {
                     "kind": "range",
@@ -24,7 +24,7 @@ mod input_tests {
         let config = JobConfig::from_json(json).unwrap();
         assert_eq!(config.nc_key, "examples/data/simple_xy.nc");
         assert_eq!(config.variable_name, "data");
-        assert_eq!(config.parquet_key, "test.parquet");
+        assert_eq!(config.output.output_path(), "test.parquet");
         assert_eq!(config.filters.len(), 1);
     }
 

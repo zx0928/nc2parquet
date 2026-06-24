@@ -3,7 +3,7 @@ use clap::CommandFactory;
 use clap_complete::{Shell, generate};
 use log::info;
 
-use nc2parquet::cli::{Cli, Commands};
+use nc2duckdb::cli::{Cli, Commands};
 
 /// Handle the completions subcommand
 pub async fn handle_completions_command(cli: &Cli) -> Result<()> {

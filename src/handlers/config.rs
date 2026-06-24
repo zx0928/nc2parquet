@@ -2,7 +2,10 @@ use anyhow::{Context, Result};
 use log::debug;
 use std::path::Path;
 
-use nc2parquet::{cli::Cli, input::JobConfig};
+use nc2duckdb::{
+    cli::Cli,
+    input::{JobConfig, OutputTarget},
+};
 
 pub fn load_configuration(
     cli: &Cli,
@@ -28,7 +31,7 @@ pub fn load_configuration(
         if let Some(env_output_path) = &env_output
             && output.is_none()
         {
-            config.parquet_key = env_output_path.clone();
+            config.output.set_output_path(env_output_path.clone());
         }
         if let Some(env_var_name) = &env_variable
             && variable.is_none()
@@ -40,7 +43,7 @@ pub fn load_configuration(
             config.nc_key = input_path.clone();
         }
         if let Some(output_path) = output {
-            config.parquet_key = output_path.clone();
+            config.output.set_output_path(output_path.clone());
         }
         if let Some(var_name) = variable {
             config.variable_name = var_name.clone();
@@ -90,15 +93,26 @@ pub fn load_configuration(
         );
     }
 
+    let output_target = if output_path.to_lowercase().ends_with(".duckdb") {
+        OutputTarget::DuckDB {
+            db_path: output_path.clone(),
+            table_name: None,
+        }
+    } else {
+        OutputTarget::Parquet {
+            parquet_key: output_path.clone(),
+            output: None,
+        }
+    };
+
     Ok(JobConfig {
         nc_key: input_path.clone(),
         variable_name: effective_var,
         variable_names: effective_vars,
         merge_variable_names: effective_merge,
-        parquet_key: output_path.clone(),
+        output: output_target,
         filters: Vec::new(),
         postprocessing: None,
-        output: None,
     })
 }
 

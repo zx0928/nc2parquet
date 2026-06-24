@@ -210,27 +210,84 @@ impl OutputConfig {
     }
 }
 
+/// Output target for the conversion job.
+///
+/// Controls whether the output goes to a Parquet file or a DuckDB database.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum OutputTarget {
+    /// Write to a Parquet file (original nc2parquet behaviour).
+    #[serde(rename = "parquet")]
+    Parquet {
+        /// Path or URI to the output Parquet file.
+        #[serde(alias = "path")]
+        parquet_key: String,
+        /// Optional Parquet output configuration.
+        output: Option<OutputConfig>,
+    },
+    /// Write to a DuckDB database file.
+    #[serde(rename = "duckdb")]
+    DuckDB {
+        /// Path to the output DuckDB database file.
+        #[serde(alias = "path")]
+        db_path: String,
+        /// Name of the table to create.
+        /// Defaults to the NetCDF variable name if not set.
+        table_name: Option<String>,
+    },
+}
+
+impl OutputTarget {
+    /// Returns the output path regardless of variant.
+    pub fn output_path(&self) -> &str {
+        match self {
+            OutputTarget::Parquet { parquet_key, .. } => parquet_key,
+            OutputTarget::DuckDB { db_path, .. } => db_path,
+        }
+    }
+
+    /// Returns true if the output path is an S3 URI.
+    pub fn is_s3(&self) -> bool {
+        self.output_path().starts_with("s3://")
+    }
+
+    /// Updates the output path.
+    pub fn set_output_path(&mut self, path: String) {
+        match self {
+            OutputTarget::Parquet { parquet_key, .. } => *parquet_key = path,
+            OutputTarget::DuckDB { db_path, .. } => *db_path = path,
+        }
+    }
+}
+
+impl Default for OutputTarget {
+    fn default() -> Self {
+        OutputTarget::Parquet {
+            parquet_key: String::new(),
+            output: None,
+        }
+    }
+}
+
 /// Complete configuration for a NetCDF-to-Parquet conversion job.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use nc2parquet::input::JobConfig;
+/// use nc2duckdb::input::JobConfig;
 ///
 /// let config = JobConfig::from_json(r#"{
 ///     "nc_key": "data/temperature.nc",
 ///     "variable_name": "t2m",
-///     "parquet_key": "output/temperature.parquet",
+///     "output": {"type": "parquet", "parquet_key": "output.parquet"},
 ///     "filters": []
 /// }"#).unwrap();
 ///
 /// assert_eq!(config.nc_key, "data/temperature.nc");
 /// assert_eq!(config.variable_name, "t2m");
-/// assert_eq!(config.parquet_key, "output/temperature.parquet");
 /// assert!(config.filters.is_empty());
 /// assert!(config.postprocessing.is_none());
 /// assert!(config.variable_names.is_none());
-/// assert!(config.output.is_none());
 /// ```
 #[derive(Deserialize, Serialize, Clone)]
 pub struct JobConfig {
@@ -266,10 +323,11 @@ pub struct JobConfig {
     /// Filters are intersected — only data points that satisfy all filters are
     /// included in the output. An empty list means all data is extracted.
     pub filters: Vec<FilterConfig>,
-    /// Path or URI where the output Parquet file should be written.
+    /// Output target configuration.
     ///
-    /// Accepts local filesystem paths or S3 URIs (same format as `nc_key`).
-    pub parquet_key: String,
+    /// Use `{"type": "parquet", "parquet_key": "out.parquet"}` for Parquet output,
+    /// or `{"type": "duckdb", "db_path": "out.duckdb"}` for DuckDB database output.
+    pub output: OutputTarget,
     /// Optional post-processing pipeline configuration.
     ///
     /// When present, the extracted DataFrame is transformed by the specified
@@ -277,13 +335,6 @@ pub struct JobConfig {
     /// data is written without modification.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub postprocessing: Option<ProcessingPipelineConfig>,
-    /// Optional Parquet output configuration (compression, row group size, etc.).
-    ///
-    /// When `None`, the Polars defaults are used: Zstd compression with no
-    /// compression-level override, no row-group-size limit, and min/max/null-count
-    /// statistics enabled.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub output: Option<OutputConfig>,
 }
 
 /// All supported filter configurations.
@@ -402,7 +453,7 @@ impl JobConfig {
     /// let config = JobConfig::from_json(r#"{
     ///     "nc_key": "input.nc",
     ///     "variable_name": "temperature",
-    ///     "parquet_key": "output.parquet",
+    ///     "output": {"type": "parquet", "parquet_key": "output.parquet"},
     ///     "filters": []
     /// }"#).unwrap();
     /// assert_eq!(config.effective_variable_names(), vec!["temperature"]);
@@ -412,7 +463,7 @@ impl JobConfig {
     ///     "nc_key": "input.nc",
     ///     "variable_name": "temperature",
     ///     "variable_names": ["temperature", "pressure"],
-    ///     "parquet_key": "output.parquet",
+    ///     "output": {"type": "parquet", "parquet_key": "output.parquet"},
     ///     "filters": []
     /// }"#).unwrap();
     /// assert_eq!(config2.effective_variable_names(), vec!["temperature", "pressure"]);
@@ -456,14 +507,14 @@ impl JobConfig {
     /// let json = r#"{
     ///     "nc_key": "input.nc",
     ///     "variable_name": "temperature",
-    ///     "parquet_key": "output.parquet",
+    ///     "output": {"type": "parquet", "parquet_key": "output.parquet"},
     ///     "filters": []
     /// }"#;
     ///
     /// let config = JobConfig::from_json(json).unwrap();
     /// assert_eq!(config.variable_name, "temperature");
     /// assert_eq!(config.nc_key, "input.nc");
-    /// assert_eq!(config.parquet_key, "output.parquet");
+    /// assert!(matches!(config.output, OutputTarget::Parquet { .. }));
     /// assert!(config.filters.is_empty());
     /// ```
     pub fn from_json(json_str: &str) -> Result<Self, Nc2ParquetError> {
@@ -549,7 +600,7 @@ impl FilterConfig {
 /// # Examples
 ///
 /// ```rust
-/// use nc2parquet::input::BatchConfig;
+/// use nc2duckdb::input::BatchConfig;
 ///
 /// let config = BatchConfig {
 ///     pattern: "data/**/*.nc".to_string(),

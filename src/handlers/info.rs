@@ -2,7 +2,7 @@ use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 
-use nc2parquet::{
+use nc2duckdb::{
     cli::{Cli, Commands, OutputFormat},
     info::{
         get_netcdf_info, print_file_info_csv, print_file_info_human, print_file_info_json,

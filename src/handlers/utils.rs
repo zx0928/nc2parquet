@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
 
-use nc2parquet::{
+use nc2duckdb::{
     cli::OutputFormat,
     input::JobConfig,
     storage::{StorageBackend, StorageFactory},
@@ -23,7 +23,7 @@ pub async fn check_output_overwrite(output_path: &str) -> Result<()> {
 
 /// Check if async processing is needed (for S3 paths)
 pub fn needs_async_processing(config: &JobConfig) -> bool {
-    config.nc_key.starts_with("s3://") || config.parquet_key.starts_with("s3://")
+    config.nc_key.starts_with("s3://") || config.output.is_s3()
 }
 
 /// Print configuration summary
@@ -33,7 +33,7 @@ pub fn print_config_summary(config: &JobConfig, format: &OutputFormat) {
             println!("\nConfiguration Summary:");
             println!("  Input:    {}", config.nc_key);
             println!("  Variable: {}", config.variable_name);
-            println!("  Output:   {}", config.parquet_key);
+            println!("  Output:   {}", config.output.output_path());
             println!("  Filters:  {}", config.filters.len());
 
             for (i, filter) in config.filters.iter().enumerate() {

@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
-use nc2parquet::{
+use nc2duckdb::{
     cli::{
         Cli, Commands, FormulaArg, ListFilterArg, Point2DFilterArg, Point3DFilterArg,
         RangeFilterArg, RenameColumnArg, UnitConversionArg,
     },
-    input::{BatchConfig, CompressionCodec, FilterConfig, OutputConfig},
+    input::{BatchConfig, CompressionCodec, FilterConfig, OutputConfig, OutputTarget},
     postprocess::{ProcessingPipelineConfig, ProcessorConfig},
     process_netcdf_batch, process_netcdf_job, process_netcdf_job_async,
 };
@@ -158,6 +158,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         variable,
         input_override,
         output_override,
+        table,
         range_filters,
         list_filters,
         point2d_filters,
@@ -177,7 +178,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         no_statistics,
     } = &cli.command
     {
-        info!("Starting NetCDF to Parquet conversion");
+        info!("Starting NetCDF to Parquet/DuckDB conversion");
 
         if let Some(pattern) = glob {
             info!("Batch mode: glob pattern '{}'", pattern);
@@ -205,7 +206,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
                 merged_list_filters,
                 merged_point2d_filters,
                 merged_point3d_filters,
-            ) = nc2parquet::cli::merge_filters(
+            ) = nc2duckdb::cli::merge_filters(
                 range_filters.clone(),
                 list_filters.clone(),
                 point2d_filters.clone(),
@@ -291,7 +292,25 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         }
 
         if let Some(output_path) = output_override {
-            config.parquet_key = output_path.clone();
+            config.output.set_output_path(output_path.clone());
+            // If the override ends with .duckdb but current target is Parquet (or vice versa),
+            // rebuild the OutputTarget. For DuckDB, also respect the --table arg.
+            let is_duckdb = output_path.to_lowercase().ends_with(".duckdb");
+            match &config.output {
+                OutputTarget::Parquet { .. } if is_duckdb => {
+                    config.output = OutputTarget::DuckDB {
+                        db_path: output_path.clone(),
+                        table_name: table.clone(),
+                    };
+                }
+                OutputTarget::DuckDB { .. } if !is_duckdb => {
+                    config.output = OutputTarget::Parquet {
+                        parquet_key: output_path.clone(),
+                        output: None,
+                    };
+                }
+                _ => {}
+            }
         }
 
         let (
@@ -299,7 +318,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             merged_list_filters,
             merged_point2d_filters,
             merged_point3d_filters,
-        ) = nc2parquet::cli::merge_filters(
+        ) = nc2duckdb::cli::merge_filters(
             range_filters.clone(),
             list_filters.clone(),
             point2d_filters.clone(),
@@ -331,13 +350,23 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             *row_group_size,
             *no_statistics,
         )? {
-            config.output = Some(output_cfg);
+            // Apply Parquet output config only when targeting Parquet output
+            if let OutputTarget::Parquet { ref mut output, .. } = config.output {
+                *output = Some(output_cfg);
+            }
+        }
+
+        // If DuckDB target, set table_name from --table arg (defaults to variable name)
+        if let OutputTarget::DuckDB { ref mut table_name, .. } = config.output {
+            if table_name.is_none() {
+                *table_name = table.clone();
+            }
         }
 
         validate_config(&config).await?;
 
         if !force && !*dry_run {
-            check_output_overwrite(&config.parquet_key).await?;
+            check_output_overwrite(config.output.output_path()).await?;
         }
 
         if *dry_run {
@@ -346,7 +375,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             return Ok(());
         }
 
-        info!("Processing: {} -> {}", config.nc_key, config.parquet_key);
+        info!("Processing: {} -> {}", config.nc_key, config.output.output_path());
         if let Some(ref merge_vars) = config.merge_variable_names {
             info!("Merge variables: {:?}", merge_vars);
         } else {
@@ -422,7 +451,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             info!("Processing throughput: {:.2} MB/s", throughput);
         }
 
-        show_output_info(&config.parquet_key, &cli.output_format).await?;
+        show_output_info(config.output.output_path(), &cli.output_format).await?;
     } else {
         unreachable!("Convert command handler called with wrong command type");
     }

@@ -3,7 +3,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info, warn};
 use std::time::Duration;
 
-use nc2parquet::{
+use nc2duckdb::{
     cli::{Cli, Commands, OutputFormat},
     input::{FilterConfig, JobConfig},
     postprocess::ProcessorConfig,
@@ -92,12 +92,13 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
         }
     }
 
-    if config.parquet_key.is_empty() {
-        errors.push("Output Parquet path cannot be empty".to_string());
+    let output_path = config.output.output_path();
+    if output_path.is_empty() {
+        errors.push("Output path cannot be empty".to_string());
     } else {
-        if !config.parquet_key.starts_with("s3://") {
-            let output_path = std::path::Path::new(&config.parquet_key);
-            if let Some(parent) = output_path.parent()
+        if !output_path.starts_with("s3://") {
+            let path = std::path::Path::new(output_path);
+            if let Some(parent) = path.parent()
                 && !parent.exists()
             {
                 warnings.push(format!(
@@ -107,11 +108,23 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
             }
         }
 
-        if !config.parquet_key.ends_with(".parquet") && !config.parquet_key.ends_with(".pq") {
-            warnings.push(format!(
-                "Output file does not have a typical Parquet extension (.parquet or .pq): {}",
-                config.parquet_key
-            ));
+        match &config.output {
+            nc2duckdb::input::OutputTarget::Parquet { .. } => {
+                if !output_path.ends_with(".parquet") && !output_path.ends_with(".pq") {
+                    warnings.push(format!(
+                        "Output file does not have a typical Parquet extension (.parquet or .pq): {}",
+                        output_path
+                    ));
+                }
+            }
+            nc2duckdb::input::OutputTarget::DuckDB { .. } => {
+                if !output_path.ends_with(".duckdb") {
+                    warnings.push(format!(
+                        "Output file does not have a typical DuckDB extension (.duckdb): {}",
+                        output_path
+                    ));
+                }
+            }
         }
     }
 
@@ -127,7 +140,7 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
     for (i, filter) in config.filters.iter().enumerate() {
         match filter.to_filter() {
             Ok(_) => match filter {
-                nc2parquet::input::FilterConfig::Range { params } => {
+                nc2duckdb::input::FilterConfig::Range { params } => {
                     if params.min_value >= params.max_value {
                         errors.push(format!(
                             "Filter {}: Range min_value ({}) must be less than max_value ({})",
@@ -143,7 +156,7 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
                         ));
                     }
                 }
-                nc2parquet::input::FilterConfig::List { params } => {
+                nc2duckdb::input::FilterConfig::List { params } => {
                     if params.values.is_empty() {
                         warnings.push(format!(
                             "Filter {}: List filter has no values (will match nothing)",
@@ -157,7 +170,7 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
                         ));
                     }
                 }
-                nc2parquet::input::FilterConfig::Point2D { params } => {
+                nc2duckdb::input::FilterConfig::Point2D { params } => {
                     if params.points.is_empty() {
                         warnings.push(format!(
                             "Filter {}: 2D point filter has no points (will match nothing)",
@@ -176,7 +189,7 @@ pub async fn validate_config(config: &JobConfig) -> Result<()> {
                         errors.push(format!("Filter {}: 2D point latitude and longitude dimension names cannot be empty", i + 1));
                     }
                 }
-                nc2parquet::input::FilterConfig::Point3D { params } => {
+                nc2duckdb::input::FilterConfig::Point3D { params } => {
                     if params.points.is_empty() || params.steps.is_empty() {
                         warnings.push(format!("Filter {}: 3D point filter has no points or steps (will match nothing)", i + 1));
                     }
@@ -244,7 +257,7 @@ pub async fn show_detailed_validation(config: &JobConfig, format: &OutputFormat)
     println!("\n1. Configuration Summary:");
     println!("   Input:        {}", config.nc_key);
     println!("   Variable:     {}", config.variable_name);
-    println!("   Output:       {}", config.parquet_key);
+    println!("   Output:       {}", config.output.output_path());
     println!("   Format:       {:?}", format);
 
     println!("\n2. Storage Information:");
@@ -253,7 +266,7 @@ pub async fn show_detailed_validation(config: &JobConfig, format: &OutputFormat)
     } else {
         "Local"
     };
-    let output_storage = if config.parquet_key.starts_with("s3://") {
+    let output_storage = if config.output.is_s3() {
         "S3"
     } else {
         "Local"

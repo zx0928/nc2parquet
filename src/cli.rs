@@ -5,47 +5,51 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
 
-/// High-performance NetCDF to Parquet converter with cloud storage support
+/// High-performance NetCDF to Parquet/DuckDB converter with cloud storage support
 #[derive(Parser, Debug)]
-#[command(name = "nc2parquet")]
-#[command(about = "Convert NetCDF files to Parquet format with advanced filtering")]
+#[command(name = "nc2duckdb")]
+#[command(about = "Convert NetCDF files to Parquet or DuckDB format with advanced filtering")]
 #[command(version)]
 #[command(author = "Rogerio Alves <rjmalves@users.noreply.github.com>")]
 #[command(long_about = "
-nc2parquet is a high-performance command-line tool for converting NetCDF files to Parquet format.
-It supports advanced filtering capabilities, cloud storage (S3), and provides comprehensive 
-configuration management.
+nc2duckdb is a high-performance command-line tool for converting NetCDF files to Parquet
+or DuckDB format. It supports advanced filtering capabilities, cloud storage (S3), and
+provides comprehensive configuration management.
 
 FEATURES:
   • Multiple filter types: Range, list, 2D point, and 3D point filters
   • Cloud storage support: Direct S3 input/output with authentication
+  • DuckDB output: Directly write to .duckdb database files with automatic table creation
   • Configuration files: JSON and YAML format support with templates
   • Progress indicators: Real-time progress bars and performance metrics
   • Validation: Comprehensive configuration and data validation
   • Shell completions: Auto-completion for bash, zsh, fish, and PowerShell
 
 EXAMPLES:
-  # Basic conversion
-  nc2parquet convert input.nc output.parquet -n temperature
+  # Basic Parquet conversion
+  nc2duckdb convert input.nc output.parquet -n temperature
+
+  # DuckDB conversion  
+  nc2duckdb convert input.nc output.duckdb -n temperature --table my_table
 
   # With filters  
-  nc2parquet convert data.nc filtered.parquet -n temp \\
+  nc2duckdb convert data.nc filtered.parquet -n temp \\
     --range 'latitude:30:60' --list 'level:1000,850,500'
 
   # S3 support
-  nc2parquet convert s3://bucket/input.nc s3://bucket/output.parquet -n sst
+  nc2duckdb convert s3://bucket/input.nc s3://bucket/output.parquet -n sst
 
   # Using config file
-  nc2parquet convert --config weather.json
+  nc2duckdb convert --config weather.json
 
   # Generate templates
-  nc2parquet template multi-filter --format yaml > config.yaml
+  nc2duckdb template multi-filter --format yaml > config.yaml
 
   # File inspection
-  nc2parquet info data.nc --detailed
+  nc2duckdb info data.nc --detailed
 
   # Generate completions
-  nc2parquet completions bash > ~/.bash_completion.d/nc2parquet
+  nc2duckdb completions bash > ~/.bash_completion.d/nc2parquet
 
 For more information and examples, see: https://github.com/rjmalves/nc2parquet
 ")]
@@ -104,13 +108,20 @@ EXAMPLES:
         #[arg(value_name = "INPUT", env = "NC2PARQUET_INPUT")]
         input: Option<String>,
 
-        /// Output Parquet file path (local or S3)
+        /// Output path.
+        /// For Parquet: a .parquet file path (local or S3 URI).
+        /// For DuckDB: a .duckdb database file path.
         #[arg(value_name = "OUTPUT", env = "NC2PARQUET_OUTPUT")]
         output: Option<String>,
 
         /// NetCDF variable name to extract
         #[arg(short = 'n', long, env = "NC2PARQUET_VARIABLE")]
         variable: Option<String>,
+
+        /// Output table name (only used when output is a .duckdb file).
+        /// Defaults to the variable name if not set.
+        #[arg(long, env = "NC2DUCKDB_TABLE")]
+        table: Option<String>,
 
         /// Override input path from config
         #[arg(long, env = "NC2PARQUET_INPUT_OVERRIDE")]

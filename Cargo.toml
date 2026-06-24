@@ -1,21 +1,17 @@
 [package]
-name = "nc2parquet"
-version = "0.2.0"
+name = "nc2duckdb"
+version = "0.1.0"
 edition = "2024"
-description = "High-performance NetCDF to Parquet converter with cloud storage support"
-authors = ["Rogerio Alves <rjmalves@users.noreply.github.com>"]
+description = "Convert NetCDF files to DuckDB database (forked from nc2parquet 0.2.0)"
+authors = ["zondy"]
 license = "MIT"
-readme = "README.md"
-homepage = "https://github.com/rjmalves/nc2parquet"
-repository = "https://github.com/rjmalves/nc2parquet"
-keywords = ["netcdf", "parquet", "climate", "data", "conversion"]
-categories = ["command-line-utilities", "science", "data-structures"]
 
 [features]
 dhat-heap = ["dep:dhat"]
+duckdb = []
 
 [[bin]]
-name = "nc2parquet"
+name = "nc2duckdb"
 path = "src/main.rs"
 
 [dependencies]

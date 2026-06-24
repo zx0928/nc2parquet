@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```rust
-//! use nc2parquet::postprocess::{PostProcessor, ProcessingPipeline, ColumnRenamer};
+//! use nc2duckdb::postprocess::{PostProcessor, ProcessingPipeline, ColumnRenamer};
 //! use polars::prelude::*;
 //! use std::collections::HashMap;
 //!
@@ -58,7 +58,7 @@ pub enum PostProcessError {
 /// # Examples
 ///
 /// ```rust
-/// use nc2parquet::postprocess::{PostProcessor, PostProcessResult};
+/// use nc2duckdb::postprocess::{PostProcessor, PostProcessResult};
 /// use polars::prelude::*;
 ///
 /// struct DoubleValues {
@@ -210,7 +210,7 @@ impl TimeUnit {
 /// # Examples
 ///
 /// ```rust
-/// use nc2parquet::postprocess::{ProcessingPipeline, ColumnRenamer, PostProcessor};
+/// use nc2duckdb::postprocess::{ProcessingPipeline, ColumnRenamer, PostProcessor};
 /// use polars::prelude::*;
 /// use std::collections::HashMap;
 ///

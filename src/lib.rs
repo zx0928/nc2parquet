@@ -9,7 +9,7 @@ pub mod postprocess;
 pub mod storage;
 
 pub use errors::Nc2ParquetError;
-pub use input::{BatchConfig, BatchResult};
+pub use input::{BatchConfig, BatchResult, OutputTarget};
 
 #[cfg(test)]
 mod tests;
@@ -25,23 +25,23 @@ use crate::extract::{
     extract_data_to_dataframe, extract_merge_variable_dataframe, extract_multi_variable_dataframe,
 };
 use crate::input::JobConfig;
-use crate::output::{write_dataframe_to_parquet, write_dataframe_to_parquet_async};
+use crate::output::{
+    write_dataframe_to_duckdb, write_dataframe_to_parquet, write_dataframe_to_parquet_async,
+};
 use crate::storage::{StorageBackend, StorageFactory};
 use std::path::{Path, PathBuf};
 
-/// Converts a NetCDF file to Parquet according to the provided job configuration.
+/// Converts a NetCDF file to Parquet or DuckDB according to the provided job configuration.
 ///
 /// Opens the file, applies filters, extracts the variable into a DataFrame, runs
-/// optional post-processing, and writes a Parquet file. The NetCDF file is closed
-/// before the Parquet write to minimise peak memory usage.
+/// optional post-processing, and writes the output. The NetCDF file is closed
+/// before the write to minimise peak memory usage.
 ///
 /// When `config.variable_names` is set with more than one entry, all listed
 /// variables are extracted into a single DataFrame with shared dimension columns.
 pub fn process_netcdf_job(config: &JobConfig) -> Result<(), Nc2ParquetError> {
     let var_names = config.effective_variable_names();
 
-    // Close the NetCDF file before postprocessing and Parquet writing to free
-    // file-descriptor and library buffers ahead of the peak-memory write step.
     let mut df = {
         let file = netcdf::open(&config.nc_key)?;
 
@@ -74,7 +74,23 @@ pub fn process_netcdf_job(config: &JobConfig) -> Result<(), Nc2ParquetError> {
         df = pipeline.execute(df)?;
     }
 
-    write_dataframe_to_parquet(&mut df, &config.parquet_key, config.output.as_ref())?;
+    match &config.output {
+        OutputTarget::Parquet {
+            parquet_key,
+            output,
+        } => {
+            write_dataframe_to_parquet(&mut df, parquet_key, output.as_ref())?;
+        }
+        OutputTarget::DuckDB {
+            db_path,
+            table_name,
+        } => {
+            let table = table_name
+                .clone()
+                .unwrap_or_else(|| config.effective_variable_names().first().cloned().unwrap_or_else(|| "data".to_string()));
+            write_dataframe_to_duckdb(&mut df, db_path, &table)?;
+        }
+    }
 
     Ok(())
 }
@@ -87,9 +103,13 @@ pub fn process_netcdf_job(config: &JobConfig) -> Result<(), Nc2ParquetError> {
 /// When `config.variable_names` is set with more than one entry, all listed
 /// variables are extracted into a single DataFrame with shared dimension columns.
 pub async fn process_netcdf_job_async(config: &JobConfig) -> Result<(), Nc2ParquetError> {
+    // Async path is only for S3 Parquet output; DuckDB output is local-only.
+    if matches!(config.output, OutputTarget::DuckDB { .. }) {
+        return process_netcdf_job(config);
+    }
+
     let var_names = config.effective_variable_names();
 
-    // `temp_file_path` is kept outside the extraction block so it can be cleaned up afterward.
     let (mut df, temp_file_path) = {
         let (file, temp_file_path) = if config.nc_key.starts_with("s3://") {
             let storage = StorageFactory::from_path(&config.nc_key).await?;
@@ -133,11 +153,17 @@ pub async fn process_netcdf_job_async(config: &JobConfig) -> Result<(), Nc2Parqu
         df = pipeline.execute(df)?;
     }
 
-    if config.parquet_key.starts_with("s3://") {
-        write_dataframe_to_parquet_async(&mut df, &config.parquet_key, config.output.as_ref())
-            .await?;
-    } else {
-        write_dataframe_to_parquet(&mut df, &config.parquet_key, config.output.as_ref())?;
+    if let OutputTarget::Parquet {
+        parquet_key,
+        output,
+    } = &config.output
+    {
+        if parquet_key.starts_with("s3://") {
+            write_dataframe_to_parquet_async(&mut df, parquet_key, output.as_ref())
+                .await?;
+        } else {
+            write_dataframe_to_parquet(&mut df, parquet_key, output.as_ref())?;
+        }
     }
 
     if let Some(temp_path) = temp_file_path
@@ -264,15 +290,19 @@ pub fn process_netcdf_batch(config: &BatchConfig) -> Result<BatchResult, Nc2Parq
         let output_path = resolve_output_path(input_path, &config.output_dir, template);
         let output_str = output_path.to_string_lossy().into_owned();
 
+        let output = OutputTarget::Parquet {
+            parquet_key: output_str,
+            output: config.output.clone(),
+        };
+
         let job = JobConfig {
             nc_key: input_str.clone(),
             variable_name: config.variable_name.clone(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: output_str,
+            output,
             filters: config.filters.clone(),
             postprocessing: config.postprocessing.clone(),
-            output: config.output.clone(),
         };
 
         match process_netcdf_job(&job) {

@@ -53,17 +53,10 @@ fn dataframe_to_parquet_bytes(
     let mut buffer = Vec::new();
     let cursor = Cursor::new(&mut buffer);
     let writer = build_parquet_writer(cursor, output_config);
-
     writer.finish(df)?;
     Ok(buffer)
 }
 
-/// Construct a [`ParquetWriter`] configured according to `output_config`.
-///
-/// When `output_config` is `None` the returned writer has no explicit
-/// configuration applied (Polars defaults: Zstd, statistics enabled, no size
-/// limits), preserving the identical behaviour that existed before this config
-/// option was introduced.
 fn build_parquet_writer<W: std::io::Write>(
     sink: W,
     output_config: Option<&OutputConfig>,
@@ -87,4 +80,74 @@ fn build_parquet_writer<W: std::io::Write>(
     }
 
     writer
+}
+
+/// Write a Polars DataFrame into a DuckDB database via duckdb CLI.
+///
+/// Writes the DataFrame to a temporary Parquet file, then invokes the
+/// `duckdb` CLI to create the database and import the data.
+pub(crate) fn write_dataframe_to_duckdb(
+    df: &mut DataFrame,
+    db_path: &str,
+    table_name: &str,
+) -> Result<(), Nc2ParquetError> {
+    debug!(
+        "Writing DataFrame to DuckDB: db={}, table={}",
+        db_path, table_name
+    );
+    debug!("DataFrame shape: {:?}", df.shape());
+    debug!("DataFrame schema:\n{:?}", df.schema());
+
+    // Step 1: write DataFrame to a temporary Parquet file
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("nc2duckdb_")
+        .tempdir()?;
+    let parquet_path = tmp_dir.path().join("temp.parquet");
+    let parquet_path_str = parquet_path.to_string_lossy().to_string();
+
+    {
+        let file = std::fs::File::create(&parquet_path)?;
+        let writer = ParquetWriter::new(file);
+        writer.finish(df)?;
+    }
+
+    // Step 2: create parent directory for the duckdb file if needed
+    if let Some(parent) = std::path::Path::new(db_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    // Step 3: invoke duckdb CLI to import the parquet into a new database
+    let sql = format!(
+        "CREATE TABLE \"{}\" AS SELECT * FROM read_parquet('{}');",
+        table_name, parquet_path_str
+    );
+    let output = std::process::Command::new("duckdb")
+        .arg(db_path)
+        .arg(&sql)
+        .output()
+        .map_err(|e| {
+            Nc2ParquetError::Config(format!(
+                "Failed to run duckdb CLI (is it installed?): {}",
+                e
+            ))
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(Nc2ParquetError::Config(format!(
+            "duckdb CLI failed:\nstdout: {}\nstderr: {}",
+            stdout, stderr
+        )));
+    }
+
+    debug!(
+        "Successfully wrote to DuckDB database: {}, table: {}",
+        db_path, table_name
+    );
+
+    // Step 4: temp dir is automatically cleaned up when tmp_dir drops
+    Ok(())
 }

@@ -2,7 +2,7 @@ use clap::Parser;
 use log::{debug, error};
 use std::process;
 
-use nc2parquet::cli::{Cli, Commands};
+use nc2duckdb::cli::{Cli, Commands};
 
 mod handlers;
 
@@ -55,6 +55,6 @@ fn init_logging(cli: &Cli) {
     };
 
     env_logger::Builder::new()
-        .filter_module("nc2parquet", log_level.parse().unwrap())
+        .filter_module("nc2duckdb", log_level.parse().unwrap())
         .init();
 }

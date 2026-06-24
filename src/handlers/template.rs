@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use log::info;
 
-use nc2parquet::{
+use nc2duckdb::{
     cli::{Cli, Commands, ConfigFormat, TemplateType},
-    input::{FilterConfig, JobConfig, ListParams, RangeParams},
+    input::{FilterConfig, JobConfig, ListParams, OutputTarget, RangeParams},
 };
 
 pub async fn handle_template_command(cli: &Cli) -> Result<()> {
@@ -38,27 +38,34 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
             variable_name: "temperature".to_string(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: "output.parquet".to_string(),
+            output: OutputTarget::Parquet {
+                parquet_key: "output.parquet".to_string(),
+                output: None,
+            },
             filters: vec![],
             postprocessing: None,
-            output: None,
         },
         TemplateType::S3 => JobConfig {
             nc_key: "s3://my-bucket/input.nc".to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: "s3://my-bucket/output.parquet".to_string(),
+            output: OutputTarget::Parquet {
+                parquet_key: "s3://my-bucket/output.parquet".to_string(),
+                output: None,
+            },
             filters: vec![],
             postprocessing: None,
-            output: None,
         },
         TemplateType::MultiFilter => JobConfig {
             nc_key: "weather_data.nc".to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: "filtered_weather.parquet".to_string(),
+            output: OutputTarget::Parquet {
+                parquet_key: "filtered_weather.parquet".to_string(),
+                output: None,
+            },
             filters: vec![
                 FilterConfig::Range {
                     params: RangeParams {
@@ -75,14 +82,16 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             ],
             postprocessing: None,
-            output: None,
         },
         TemplateType::Weather => JobConfig {
             nc_key: "weather_station_data.nc".to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: "weather_analysis.parquet".to_string(),
+            output: OutputTarget::Parquet {
+                parquet_key: "weather_analysis.parquet".to_string(),
+                output: None,
+            },
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
                     dimension_name: "time".to_string(),
@@ -91,14 +100,16 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             }],
             postprocessing: None,
-            output: None,
         },
         TemplateType::Ocean => JobConfig {
             nc_key: "ocean_temperature.nc".to_string(),
             variable_name: "sea_surface_temperature".to_string(),
             variable_names: None,
             merge_variable_names: None,
-            parquet_key: "sst_analysis.parquet".to_string(),
+            output: OutputTarget::Parquet {
+                parquet_key: "sst_analysis.parquet".to_string(),
+                output: None,
+            },
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
                     dimension_name: "depth".to_string(),
@@ -107,7 +118,6 @@ pub fn generate_template(template_type: &TemplateType, format: &ConfigFormat) ->
                 },
             }],
             postprocessing: None,
-            output: None,
         },
     };
 

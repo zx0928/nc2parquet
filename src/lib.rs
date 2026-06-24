@@ -21,7 +21,9 @@ pub mod test_helpers;
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-use crate::extract::{extract_data_to_dataframe, extract_multi_variable_dataframe};
+use crate::extract::{
+    extract_data_to_dataframe, extract_merge_variable_dataframe, extract_multi_variable_dataframe,
+};
 use crate::input::JobConfig;
 use crate::output::{write_dataframe_to_parquet, write_dataframe_to_parquet_async};
 use crate::storage::{StorageBackend, StorageFactory};
@@ -49,7 +51,9 @@ pub fn process_netcdf_job(config: &JobConfig) -> Result<(), Nc2ParquetError> {
             filters.push(filter);
         }
 
-        let df = if var_names.len() == 1 {
+        let df = if let Some(ref merge_vars) = config.merge_variable_names {
+            extract_merge_variable_dataframe(&file, merge_vars, &filters)?
+        } else if var_names.len() == 1 {
             let var = file
                 .variable(&var_names[0])
                 .ok_or_else(|| Nc2ParquetError::VariableNotFound(var_names[0].clone()))?;
@@ -106,7 +110,9 @@ pub async fn process_netcdf_job_async(config: &JobConfig) -> Result<(), Nc2Parqu
             filters.push(filter);
         }
 
-        let df = if var_names.len() == 1 {
+        let df = if let Some(ref merge_vars) = config.merge_variable_names {
+            extract_merge_variable_dataframe(&file, merge_vars, &filters)?
+        } else if var_names.len() == 1 {
             let var = file
                 .variable(&var_names[0])
                 .ok_or_else(|| Nc2ParquetError::VariableNotFound(var_names[0].clone()))?;
@@ -262,6 +268,7 @@ pub fn process_netcdf_batch(config: &BatchConfig) -> Result<BatchResult, Nc2Parq
             nc_key: input_str.clone(),
             variable_name: config.variable_name.clone(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_str,
             filters: config.filters.clone(),
             postprocessing: config.postprocessing.clone(),

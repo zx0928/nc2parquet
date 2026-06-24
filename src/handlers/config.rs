@@ -9,6 +9,8 @@ pub fn load_configuration(
     input: &Option<String>,
     output: &Option<String>,
     variable: &Option<String>,
+    variables: &[String],
+    merge_variables: &[String],
 ) -> Result<JobConfig> {
     // Priority: CLI args > environment variables > config file
     let env_input = std::env::var("NC2PARQUET_INPUT").ok();
@@ -56,18 +58,43 @@ pub fn load_configuration(
         .context("Output file path is required (use --config file, provide OUTPUT argument, or set NC2PARQUET_OUTPUT environment variable)")?;
 
     let var_name = variable.as_ref()
-        .or(env_variable.as_ref())
-        .context("Variable name is required (use --config file, --variable option, or set NC2PARQUET_VARIABLE environment variable)")?;
+        .or(env_variable.as_ref());
 
-    debug!(
-        "Created configuration from CLI/environment - input: {}, output: {}, variable: {}",
-        input_path, output_path, var_name
-    );
+    let use_merge = !merge_variables.is_empty();
+
+    let (effective_var, effective_vars, effective_merge): (String, Option<Vec<String>>, Option<Vec<String>>) =
+        if use_merge {
+            (merge_variables[0].clone(), None, Some(merge_variables.to_vec()))
+        } else {
+            match (var_name, variables.is_empty()) {
+                (Some(name), _) => (name.clone(), None, None),
+                (None, false) => (variables[0].clone(), Some(variables.to_vec()), None),
+                (None, true) => anyhow::bail!("Variable name is required (use --config file, --variable or --variables option, or set NC2PARQUET_VARIABLE environment variable)"),
+            }
+        };
+
+    if let Some(ref vars) = effective_merge {
+        debug!(
+            "Created configuration from CLI/environment - input: {}, output: {}, merge_variables: {:?}",
+            input_path, output_path, vars,
+        );
+    } else if let Some(ref vars) = effective_vars {
+        debug!(
+            "Created configuration from CLI/environment - input: {}, output: {}, variables: {:?}",
+            input_path, output_path, vars,
+        );
+    } else {
+        debug!(
+            "Created configuration from CLI/environment - input: {}, output: {}, variable: {}",
+            input_path, output_path, effective_var,
+        );
+    }
 
     Ok(JobConfig {
         nc_key: input_path.clone(),
-        variable_name: var_name.clone(),
-        variable_names: None,
+        variable_name: effective_var,
+        variable_names: effective_vars,
+        merge_variable_names: effective_merge,
         parquet_key: output_path.clone(),
         filters: Vec::new(),
         postprocessing: None,

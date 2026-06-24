@@ -166,6 +166,13 @@ EXAMPLES:
         #[arg(short = 'N', long = "variables", value_delimiter = ',')]
         variables: Vec<String>,
 
+        /// Merge variables with different dimensions into one Parquet file (comma-delimited).
+        /// Variables can have different dimension sets — lower-dimensional variables are
+        /// broadcast (repeated) to match the highest-dimensional variable's shape. 
+        /// E.g. "-M lat,lon,zeta" merges 1D lat/lon with 2D zeta into a single file.
+        #[arg(short = 'M', long = "merge-variables", value_delimiter = ',')]
+        merge_variables: Vec<String>,
+
         /// Process all files matching this glob pattern (e.g. "data/**/*.nc").
         /// When set, the OUTPUT argument is treated as an output directory.
         #[arg(long, value_name = "PATTERN")]

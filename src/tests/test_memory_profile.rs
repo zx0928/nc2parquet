@@ -26,6 +26,7 @@ mod memory_profile {
                 .to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,

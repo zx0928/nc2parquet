@@ -14,6 +14,7 @@ mod integration_tests {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
@@ -40,6 +41,7 @@ mod integration_tests {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -71,6 +73,7 @@ mod integration_tests {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "pressure".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Point2D {
                 params: Point2DParams {
@@ -103,6 +106,7 @@ mod integration_tests {
             nc_key: file_path.to_string_lossy().to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![
                 FilterConfig::Range {
@@ -206,6 +210,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -255,6 +260,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: crate::input::RangeParams {
@@ -303,6 +309,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -356,6 +363,7 @@ mod workflow_tests {
             nc_key: "nonexistent_file.nc".to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
@@ -375,6 +383,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "nonexistent_variable".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
@@ -390,6 +399,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: crate::input::RangeParams {
@@ -420,6 +430,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
@@ -435,6 +446,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path2.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(crate::postprocess::ProcessingPipelineConfig {
@@ -484,6 +496,7 @@ mod workflow_tests {
                 .to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: sync_output.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: None,
@@ -622,6 +635,7 @@ mod error_and_edge_case_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -701,6 +715,7 @@ mod error_and_edge_case_tests {
                 .to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![FilterConfig::Range {
                 params: RangeParams {
@@ -769,6 +784,7 @@ mod error_and_edge_case_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -804,6 +820,7 @@ mod error_and_edge_case_tests {
                 .to_string(),
             variable_name: "data".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {
@@ -876,6 +893,7 @@ mod error_and_edge_case_tests {
                 .to_string(),
             variable_name: "temperature".to_string(),
             variable_names: None,
+            merge_variable_names: None,
             parquet_key: output_path.to_string_lossy().to_string(),
             filters: vec![],
             postprocessing: Some(ProcessingPipelineConfig {

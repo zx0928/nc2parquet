@@ -769,6 +769,177 @@ fn get_coordinate_variables(
     Ok(coordinate_vars)
 }
 
+/// Extracts multiple variables with potentially different dimensions into one DataFrame.
+///
+/// The variable with the most dimensions is chosen as the "master" — its full
+/// Cartesian product forms the output skeleton (dimension columns). All other
+/// variables are broadcast (each value is repeated as needed) to match that
+/// skeleton, so every row has a value for every variable.
+///
+/// This is equivalent to a cross-join / broadcast in columnar databases: each
+/// lower-dimensional variable's values are repeated to fill the full dimension
+/// space of the master variable.
+///
+/// # Errors
+///
+/// Returns an error if any variable has a dimension not present in the master
+/// variable (i.e. a dimension that cannot be broadcast into).
+pub(crate) fn extract_merge_variable_dataframe(
+    file: &netcdf::File,
+    var_names: &[String],
+    _filters: &[Box<dyn NCFilter>],
+) -> Result<DataFrame, Nc2ParquetError> {
+    debug_assert!(!var_names.is_empty(), "var_names must be non-empty");
+
+    // Gather dimension info for each variable
+    struct VarInfo {
+        name: String,
+        dims: Vec<(String, usize)>,
+    }
+
+    let var_infos: Vec<VarInfo> = var_names
+        .iter()
+        .map(|name| {
+            let var = file
+                .variable(name)
+                .ok_or_else(|| Nc2ParquetError::VariableNotFound(name.clone()))?;
+            let dims: Vec<(String, usize)> = var
+                .dimensions()
+                .iter()
+                .map(|d| (d.name().to_string(), d.len()))
+                .collect();
+            Ok(VarInfo {
+                name: name.clone(),
+                dims,
+            })
+        })
+        .collect::<Result<Vec<_>, Nc2ParquetError>>()?;
+
+    // Find master = variable with the most dimensions.
+    // Tie goes to the first encountered.
+    let master_idx = var_infos
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, vi)| vi.dims.len())
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+
+    let master_name = &var_infos[master_idx].name;
+    let master_dims = &var_infos[master_idx].dims;
+    let master_dim_names: Vec<String> = master_dims.iter().map(|(n, _)| n.clone()).collect();
+    let master_sizes: Vec<usize> = master_dims.iter().map(|(_, s)| *s).collect();
+
+    // Verify all variable dims are subsets of master dims.
+    for vi in &var_infos {
+        for (dim_name, _) in &vi.dims {
+            if !master_dim_names.contains(dim_name) {
+                return Err(Nc2ParquetError::Extraction(format!(
+                    "Cannot merge variable '{}': dimension '{}' not found in master variable '{}' (dims: {:?})",
+                    vi.name, dim_name, master_name, master_dim_names,
+                )));
+            }
+        }
+    }
+
+    // Extract master variable with dimension columns.
+    let master_var = file
+        .variable(master_name)
+        .ok_or_else(|| Nc2ParquetError::VariableNotFound(master_name.clone()))?;
+    let master_dim_mgr = DimensionIndexManager::new(&master_var)?;
+    let mut df = extract_data_with_dimension_manager(
+        file,
+        &master_var,
+        master_name,
+        &master_dim_mgr,
+    )?;
+
+    // Extract and broadcast remaining variables.
+    for vi in &var_infos {
+        if vi.name == *master_name {
+            continue;
+        }
+
+        let var = file
+            .variable(&vi.name)
+            .ok_or_else(|| Nc2ParquetError::VariableNotFound(vi.name.clone()))?;
+        let var_dim_mgr = DimensionIndexManager::new(&var)?;
+        let values = extract_variable_values_with_dim_manager(&var, &var_dim_mgr)?;
+
+        let expanded =
+            expand_values_to_master(&values, &vi.dims, &master_dim_names, &master_sizes);
+
+        df.with_column(Series::new(vi.name.as_str().into(), expanded))?;
+    }
+
+    Ok(df)
+}
+
+/// Expands values from a variable's native dimension space to the master's
+/// dimension space by repeating (broadcasting) values across missing dimensions.
+///
+/// Each value in `source_values` at position `(d0, d1, ...)` in the source's
+/// row-major index space is copied to every master position that shares the
+/// same indices on the source's dimensions.
+fn expand_values_to_master(
+    source_values: &[f32],
+    source_dims: &[(String, usize)],
+    master_dim_names: &[String],
+    master_sizes: &[usize],
+) -> Vec<f32> {
+    let ndims = master_dim_names.len();
+
+    // Build mapping from source dimension name to its position in master.
+    let source_dim_to_master_pos: Vec<usize> = source_dims
+        .iter()
+        .map(|(name, _)| {
+            master_dim_names
+                .iter()
+                .position(|m| m == name)
+                .expect("source dim must exist in master; checked by caller")
+        })
+        .collect();
+
+    // Compute strides for the source variable's own dimension space (row-major,
+    // last dim varies fastest).
+    let source_sizes: Vec<usize> = source_dims.iter().map(|(_, s)| *s).collect();
+    let mut source_strides = vec![1usize; source_dims.len()];
+    for i in (0..source_dims.len().saturating_sub(1)).rev() {
+        source_strides[i] = source_strides[i + 1] * source_sizes[i + 1];
+    }
+
+    let total: usize = master_sizes.iter().product();
+    let mut expanded = Vec::with_capacity(total);
+
+    // Iterate over the master's Cartesian product in row-major order.
+    let mut pos = vec![0usize; ndims];
+    loop {
+        // Compute flat index into the source value array.
+        let mut source_idx = 0usize;
+        for (si, &mp) in source_dim_to_master_pos.iter().enumerate() {
+            source_idx += pos[mp] * source_strides[si];
+        }
+        expanded.push(source_values[source_idx]);
+
+        // Advance to the next master combination (row-major carry).
+        let mut carry = true;
+        for d in (0..ndims).rev() {
+            if carry {
+                pos[d] += 1;
+                if pos[d] < master_sizes[d] {
+                    carry = false;
+                } else {
+                    pos[d] = 0;
+                }
+            }
+        }
+        if carry {
+            break;
+        }
+    }
+
+    expanded
+}
+
 fn extract_variable_value(
     var: &netcdf::Variable,
     indices: &[usize],

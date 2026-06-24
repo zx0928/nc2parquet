@@ -41,6 +41,8 @@ pub async fn handle_validate_command(cli: &Cli) -> Result<()> {
                 .map(|p| p.to_string_lossy().to_string()),
             &None,
             &None,
+            &[],
+            &[],
         )?;
 
         if let Some(pb) = &progress {

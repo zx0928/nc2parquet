@@ -169,6 +169,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         kelvin_to_celsius,
         formulas,
         variables,
+        merge_variables,
         glob,
         compression,
         compression_level,
@@ -283,7 +284,7 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
             return Ok(());
         }
 
-        let mut config = load_configuration(cli, input, output, variable)?;
+        let mut config = load_configuration(cli, input, output, variable, variables, merge_variables)?;
 
         if let Some(input_path) = input_override {
             config.nc_key = input_path.clone();
@@ -291,10 +292,6 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
 
         if let Some(output_path) = output_override {
             config.parquet_key = output_path.clone();
-        }
-
-        if !variables.is_empty() {
-            config.variable_names = Some(variables.clone());
         }
 
         let (
@@ -350,11 +347,15 @@ pub async fn handle_convert_command(cli: &Cli) -> Result<()> {
         }
 
         info!("Processing: {} -> {}", config.nc_key, config.parquet_key);
-        let eff_vars = config.effective_variable_names();
-        if eff_vars.len() == 1 {
-            info!("Variable: {}", eff_vars[0]);
+        if let Some(ref merge_vars) = config.merge_variable_names {
+            info!("Merge variables: {:?}", merge_vars);
         } else {
-            info!("Variables: {:?}", eff_vars);
+            let eff_vars = config.effective_variable_names();
+            if eff_vars.len() == 1 {
+                info!("Variable: {}", eff_vars[0]);
+            } else {
+                info!("Variables: {:?}", eff_vars);
+            }
         }
         info!("Filters: {} configured", config.filters.len());
 

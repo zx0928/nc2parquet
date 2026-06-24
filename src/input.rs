@@ -253,6 +253,14 @@ pub struct JobConfig {
     /// When `None`, the single `variable_name` field is used instead.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub variable_names: Option<Vec<String>>,
+
+    /// Optional list of variable names with different dimensions to merge.
+    ///
+    /// When set, all listed variables are extracted into one Parquet file,
+    /// broadcasting lower-dimensional variables to match the highest-dimensional
+    /// variable's shape. Unlike `variable_names`, dimensions need not match.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub merge_variable_names: Option<Vec<String>>,
     /// Filters to apply during data extraction.
     ///
     /// Filters are intersected — only data points that satisfy all filters are
